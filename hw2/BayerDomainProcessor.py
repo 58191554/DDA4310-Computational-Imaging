@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from utils import *
 from tqdm import tqdm
 
 """
@@ -27,42 +28,42 @@ def malvar(ctr_name, ctr_val, y, x, img):
         # G at R location
         g = 4 * img[y,x] - img[y-2,x] - img[y,x-2] - img[y+2,x] - img[y,x+2] \
             + 2 * (img[y+1,x] + img[y,x+1] + img[y-1,x] + img[y,x-1])
-        g /= 8
+        g //= 8
         # B at red in R row, R column
         b = 6 * img[y,x] - 3 * (img[y-2,x] + img[y,x-2] + img[y+2,x] + img[y,x+2]) / 2 \
             + 2 * (img[y-1,x-1] + img[y-1,x+1] + img[y+1,x-1] + img[y+1,x+1])
-        b /= 8
+        b //= 8
     elif ctr_name == 'gr':
         g = ctr_val
         # R at green in R row, B column
         r = 5 * img[y,x] - img[y,x-2] - img[y-1,x-1] - img[y+1,x-1] - img[y-1,x+1] - img[y+1,x+1] - img[y,x+2] \
             + (img[y-2,x] + img[y+2,x]) / 2 + 4 * (img[y,x-1] + img[y,x+1])
-        r /= 8
+        r //= 8
         # B at green in R row, B column
         b = 5 * img[y,x] - img[y-2,x] - img[y-1,x-1] - img[y-1,x+1] - img[y+2,x] - img[y+1,x-1] - img[y+1,x+1] \
             + (img[y,x-2] + img[y,x+2]) / 2 + 4 * (img[y-1,x] + img[y+1,x])
-        b /= 8
+        b //= 8
     elif ctr_name == 'gb':
         g = ctr_val
         # R at green in B row, R column
         r = 5 * img[y,x] - img[y-2,x] - img[y-1,x-1] - img[y-1,x+1] - img[y+2,x] - img[y+1,x-1] - img[y+1,x+1] \
             + (img[y,x-2] + img[y,x+2]) / 2 + 4 * (img[y-1,x] + img[y+1,x])
-        r /= 8
+        r //= 8
         # B at green in B row, R column
         b = 5 * img[y,x] - img[y,x-2] - img[y-1,x-1] - img[y+1,x-1] - img[y-1,x+1] - img[y+1,x+1] - img[y,x+2] \
             + (img[y-2,x] + img[y+2,x]) / 2 + 4 * (img[y,x-1] + img[y,x+1])
-        b /= 8
+        b //= 8
     elif ctr_name == 'b':
         b = ctr_val
         # R at blue in B row, B column
         r = 6 * img[y,x] - 3 * (img[y-2,x] + img[y,x-2] + img[y+2,x] + img[y,x+2]) / 2 \
             + 2 * (img[y-1,x-1] + img[y-1,x+1] + img[y+1,x-1] + img[y+1,x+1])
-        r /= 8
+        r //= 8
         # G at blue in B row, B column
         g = 4 * img[y,x] - img[y-2,x] - img[y,x-2] - img[y+2,x] - img[y,x+2] \
             + 2 * (img[y+1,x] + img[y,x+1] + img[y-1,x] + img[y,x-1])
-        g /= 8
-    return [r, g, b]
+        g //= 8
+    return np.stack((r, g, b), axis=-1)
     
 class DPC:
     def __init__(self, img, thres, mode, clip):
@@ -72,60 +73,44 @@ class DPC:
         self.clip = clip
     
     def execute(self):
+        padded_bayer = np.pad(self.img, ((2, 2), (2, 2)), 'reflect')
+        padded_sub_arrays = split_bayer(padded_bayer, 'rggb')
         
-        img_pad = np.pad(self.img, (2, 2), "reflect")
-        h, w = img_pad.shape[:2]
-        dpc_img = np.empty((h, w), np.uint64)
-        for y in tqdm(range(h - 4)):
-            for x in range(w - 4):
-                """
-                p1 p2 p3
-                p4 p0 p5
-                p6 p7 p8
-                """
-                p0 = img_pad[y + 2, x + 2]
-                p1 = img_pad[y, x]
-                p2 = img_pad[y, x + 2]
-                p3 = img_pad[y, x + 4]
-                p4 = img_pad[y + 2, x]
-                p5 = img_pad[y + 2, x + 4]
-                p6 = img_pad[y + 4, x]
-                p7 = img_pad[y + 4, x + 2]
-                p8 = img_pad[y + 4, x + 4]
-                
-                try:
-                    abc = (abs(p1 - p0) > self.thres) and \
-                          (abs(p2 - p0) > self.thres) and \
-                          (abs(p3 - p0) > self.thres) and \
-                          (abs(p4 - p0) > self.thres) and \
-                          (abs(p5 - p0) > self.thres) and \
-                          (abs(p6 - p0) > self.thres) and \
-                          (abs(p7 - p0) > self.thres) and \
-                          (abs(p8 - p0) > self.thres)
-                except RuntimeWarning:
-                    abc = True
-                
-                if abc:
-                    if self.mode == 'gradient':
-                        dv = abs(2 * p0 - p2 - p7)
-                        dh = abs(2 * p0 - p4 - p5)
-                        ddl = abs(2 * p0 - p1 - p8)
-                        ddr = abs(2 * p0 - p3 - p6)
-                        min_val = min(dv, dh, ddl, ddr)
-                        
-                        if min_val == dv:
-                            p0 = (p2 + p7 + 1) // 2
-                        elif min_val == dh:
-                            p0 = (p4 + p5 + 1) // 2
-                        elif min_val == ddl:
-                            p0 = (p1 + p8 + 1) // 2
-                        else:
-                            p0 = (p3 + p6 + 1) // 2
-                
-                dpc_img[y, x] = p0
-        
-        np.clip(dpc_img, 0, self.clip, out=dpc_img)
-        return dpc_img    
+        dpc_sub_arrays = []
+        for padded_array in padded_sub_arrays:
+            shifted_arrays = tuple(shift_array(padded_array, window_size=3))   # generator --> tuple
+
+            mask = (np.abs(shifted_arrays[4] - shifted_arrays[1]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[7]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[3]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[5]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[0]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[2]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[6]) > self.thres) * \
+                   (np.abs(shifted_arrays[4] - shifted_arrays[8]) > self.thres)
+
+            dv = np.abs(2 * shifted_arrays[4] - shifted_arrays[1] - shifted_arrays[7])
+            dh = np.abs(2 * shifted_arrays[4] - shifted_arrays[3] - shifted_arrays[5])
+            ddl = np.abs(2 * shifted_arrays[4] - shifted_arrays[0] - shifted_arrays[8])
+            ddr = np.abs(2 * shifted_arrays[4] - shifted_arrays[6] - shifted_arrays[2])
+            indices = np.argmin(np.dstack([dv, dh, ddl, ddr]), axis=2)[..., None]
+
+            neighbor_stack = np.right_shift(np.dstack([
+                shifted_arrays[1] + shifted_arrays[7],
+                shifted_arrays[3] + shifted_arrays[5],
+                shifted_arrays[0] + shifted_arrays[8],
+                shifted_arrays[6] + shifted_arrays[2]
+            ]), 1)
+            dpc_array = np.take_along_axis(neighbor_stack, indices, axis=2).squeeze(2)
+            dpc_sub_arrays.append(
+                mask * dpc_array + ~mask * shifted_arrays[4]
+            )
+
+        dpc_bayer = reconstruct_bayer(dpc_sub_arrays, 'rggb')
+
+        dpc_bayer = dpc_bayer.astype(np.uint16)
+        return dpc_bayer
+
     
 class BLC:
     def __init__(self, img, parameter, bayer_pattern, clip):
@@ -169,21 +154,27 @@ class AAF:
         self.kernel = kernel
                       
     def execute(self):
-        img_pad = np.pad(self.img, ((2, 2), (2, 2)), 'reflect')
-        kernel_height, kernel_width = self.kernel.shape
-        img_height, img_width = self.img.shape
-        result_height = img_height - kernel_height + 1
-        result_width = img_width - kernel_width + 1
-        aaf_img = np.zeros((result_height, result_width))
-        
-        # convolve
-        for y in tqdm(range(result_height)):
-            for x in range(result_width):
-                patch = img_pad[y:y+kernel_height, x:x+kernel_width]
-                aaf_img[y, x] = np.sum(patch * self.kernel)
-        
-        return aaf_img    
-    
+        bayer = self.img.astype(np.uint32)
+
+        padded_bayer = np.pad(bayer, ((2, 2), (2, 2)), 'reflect')
+
+        padded_sub_arrays = split_bayer(padded_bayer, 'rggb')
+
+        aaf_sub_arrays = []
+        for padded_array in padded_sub_arrays:
+            shifted_arrays = shift_array(padded_array, window_size=3)
+            aaf_sub_array = 0
+            for i, shifted_array in enumerate(shifted_arrays):
+                mul = 8 if i == 4 else 1
+                aaf_sub_array += mul * shifted_array
+
+            aaf_sub_arrays.append(np.right_shift(aaf_sub_array, 4))
+
+        aaf_bayer = reconstruct_bayer(aaf_sub_arrays, 'rggb')
+
+        aaf_bayer = aaf_bayer.astype(np.uint16)
+        return aaf_bayer
+
 class AWB:
     def __init__(self, img, parameter, bayer_pattern, awb_clip):
         self.img = img
@@ -228,29 +219,71 @@ class CFA:
         self.mode = cfa_mode
         self.bayer_pattern = bayer_pattern
         self.clip = cfa_clip
-        
+        self.channel_indices_and_weights = (
+            [[1, 3, 4, 5, 7], [-0.125, -0.125, 0.5, -0.125, -0.125]],
+            [[1, 3, 4, 5, 7], [-0.1875, -0.1875, 0.75, -0.1875, -0.1875]],
+            [[1, 3, 4, 5, 7], [0.0625, -0.125, 0.625, -0.125, 0.0625]],
+            [[1, 3, 4, 5, 7], [-0.125, 0.0625, 0.625, 0.0625, -0.125]],
+            [[3, 4], [0.25, 0.25]],
+            [[1, 4], [0.25, 0.25]],
+            [[4, 7], [0.25, 0.25]],
+            [[4, 5], [0.25, 0.25]],
+            [[4, 5], [0.5, 0.5]],
+            [[1, 3], [0.5, 0.5]],
+            [[1, 4], [0.5, 0.5]],
+            [[4, 7], [0.5, 0.5]],
+            [[3, 4], [0.5, 0.5]],
+            [[0, 1, 3, 4], [0.25, 0.25, 0.25, 0.25]],
+            [[4, 5, 7, 8], [0.25, 0.25, 0.25, 0.25]],
+            [[1, 2, 4, 5], [-0.125, -0.125, -0.125, -0.125]],
+            [[3, 4, 6, 7], [-0.125, -0.125, -0.125, -0.125]]
+        )
+
     def execute(self):
+        # img_pad = np.pad(self.img, ((2, 2), (2, 2)), 'reflect')
+        # img_pad = img_pad.astype(np.int32)
+        # raw_h = self.img.shape[0]
+        # raw_w = self.img.shape[1]
+        # cfa_img = np.empty((raw_h, raw_w, 3), np.int16)        
+        
+        # for y in tqdm(range(0, img_pad.shape[0]-4-1, 2)):
+        #     for x in range(0, img_pad.shape[1]-4-1, 2):
+        #         # Default as rggb malvar
+        #         r = img_pad[y+2,x+2]
+        #         gr = img_pad[y+2,x+3]
+        #         gb = img_pad[y+3,x+2]
+        #         b = img_pad[y+3,x+3]        
+                
+        #         cfa_img[y,x,:] = malvar('r', r, y+2,x+2, img_pad)
+        #         cfa_img[y,x+1,:] = malvar('gr', gr, y+2,x+3, img_pad)
+        #         cfa_img[y+1,x,:] = malvar('gb', gb, y+3,x+2, img_pad)
+        #         cfa_img[y+1,x+1,:] = malvar('b', b, y+3,x+3, img_pad)
+        # np.clip(cfa_img, 0, self.clip, out=cfa_img)
+        # return cfa_img
+
         img_pad = np.pad(self.img, ((2, 2), (2, 2)), 'reflect')
         img_pad = img_pad.astype(np.int32)
         raw_h = self.img.shape[0]
         raw_w = self.img.shape[1]
-        cfa_img = np.empty((raw_h, raw_w, 3), np.int16)        
+        cfa_img = np.empty((raw_h, raw_w, 3), np.int16)
         
-        for y in tqdm(range(0, img_pad.shape[0]-4-1, 2)):
-            for x in range(0, img_pad.shape[1]-4-1, 2):
-                # Default as rggb malvar
-                r = img_pad[y+2,x+2]
-                gr = img_pad[y+2,x+3]
-                gb = img_pad[y+3,x+2]
-                b = img_pad[y+3,x+3]        
-                
-                cfa_img[y,x,:] = malvar('r', r, y+2,x+2, img_pad)
-                cfa_img[y,x+1,:] = malvar('gr', gr, y+2,x+3, img_pad)
-                cfa_img[y+1,x,:] = malvar('gb', gb, y+3,x+2, img_pad)
-                cfa_img[y+1,x+1,:] = malvar('b', b, y+3,x+3, img_pad)
+        # Generate indices for accessing elements
+        y_indices, x_indices = np.meshgrid(np.arange(0, img_pad.shape[0]-4-1, 2), np.arange(0, img_pad.shape[1]-4-1, 2))
+        # Default as rggb malvar
+        r = img_pad[y_indices + 2, x_indices + 2]
+        gr = img_pad[y_indices + 2, x_indices + 3]
+        gb = img_pad[y_indices + 3, x_indices + 2]
+        b = img_pad[y_indices + 3, x_indices + 3]
+        
+        cfa_img[y_indices, x_indices, :] = malvar('r', r, y_indices + 2, x_indices + 2, img_pad)
+        cfa_img[y_indices, x_indices + 1, :] = malvar('gr', gr, y_indices + 2, x_indices + 3, img_pad)
+        cfa_img[y_indices + 1, x_indices, :] = malvar('gb', gb, y_indices + 3, x_indices + 2, img_pad)
+        cfa_img[y_indices + 1, x_indices + 1, :] = malvar('b', b, y_indices + 3, x_indices + 3, img_pad)
+        
         np.clip(cfa_img, 0, self.clip, out=cfa_img)
         return cfa_img
-                
+    
+
 if __name__ == "__main__":
     
     

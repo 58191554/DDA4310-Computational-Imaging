@@ -2,21 +2,18 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
+from utils import *
+
 def RGB2YUV(img:np.ndarray):
-    image_float = img.astype(np.float32) / 255.0
-    
-    # Y' = 0.299R + 0.587G + 0.114B
-    # U = -0.147R - 0.289G + 0.436B
-    # V = 0.615R - 0.515G - 0.100B
-    # Note: The matrix here is the RGB to Y'UV conversion matrix, which is slightly different from the standard YUV conversion matrix.
-    # The standard YUV transformation matrix also includes a constant offset, but we have omitted that offset here to simplify the implementation.
-    yuv_matrix = np.array([[0.299, 0.587, 0.114],
-                           [-0.147, -0.289, 0.436],
-                           [0.615, -0.515, -0.100]])
-    print("Converting RGB to YUV")
-    yuv_image = np.dot(image_float, yuv_matrix.T)
-    yuv_image = (yuv_image * 255).astype(np.uint8)
-    return yuv_image
+    matrix = np.array([[66, 129, 25],
+                       [-38, -74, 112],
+                       [112, -94, -18]], dtype=np.int32).T  # x256
+    bias = np.array([16, 128, 128], dtype=np.int32).reshape(1, 1, 3)
+    rgb_image = img.astype(np.int32)
+
+    ycrcb_image = (np.right_shift(rgb_image @ matrix, 8) + bias).astype(np.uint8)
+
+    return ycrcb_image
 
 def YUV2RGB(img: np.ndarray):
     # Y'UV to RGB conversion matrix
@@ -58,34 +55,62 @@ class EE:
         self.thres = ee_thres
         self.emclip = ee_emclip
     
+
     def execute(self):
+        # img_pad = np.pad(self.img, ((1, 1), (2, 2)), 'reflect')
+        # h, w = img_pad.shape[0], img_pad.shape[1]
+        # ee_img = np.empty((h, w), np.int16)
+        # em_img = np.empty((h, w), np.int16)
+        # for y in tqdm(range(img_pad.shape[0] - 2)):
+        #     for x in range(img_pad.shape[1] - 4):
+        #         em_img[y,x] = np.sum(np.multiply(img_pad[y:y+3, x:x+5], self.edge_filter[:, :])) / 8
+
+        #         lut = 0
+        #         if em_img[y,x] < -self.thres[1]:
+        #             lut = self.gain[1] * em_img[y,x]
+        #         elif em_img[y,x] < -self.thres[0] and em_img[y,x] > -self.thres[1]:
+        #             lut = 0
+        #         elif em_img[y,x] < self.thres[0] and em_img[y,x] > -self.thres[1]:
+        #             lut = self.gain[0] * em_img[y,x]
+        #         elif em_img[y,x] > self.thres[0] and em_img[y,x] < self.thres[1]:
+        #             lut = 0
+        #         elif em_img[y,x] > self.thres[1]:
+        #             lut = self.gain[1] * em_img[y,x]
+        #         # np.clip(lut, clip[0], clip[1], out=lut)
+        #         lut = max(self.emclip[0], min(lut / 256, self.emclip[1]))
+                
+                
+        #         ee_img[y,x] = img_pad[y+1,x+2] + lut
+        # np.clip(ee_img, 0, 255, out=ee_img)
+        # return ee_img, em_img
+        
         img_pad = np.pad(self.img, ((1, 1), (2, 2)), 'reflect')
         h, w = img_pad.shape[0], img_pad.shape[1]
-        ee_img = np.empty((h, w), np.int16)
         em_img = np.empty((h, w), np.int16)
-        for y in tqdm(range(img_pad.shape[0] - 2)):
-            for x in range(img_pad.shape[1] - 4):
-                em_img[y,x] = np.sum(np.multiply(img_pad[y:y+3, x:x+5], self.edge_filter[:, :])) / 8
+        em_img = convolution3x5_grey(img_pad, self.edge_filter)
 
-                lut = 0
-                if em_img[y,x] < -self.thres[1]:
-                    lut = self.gain[1] * em_img[y,x]
-                elif em_img[y,x] < -self.thres[0] and em_img[y,x] > -self.thres[1]:
-                    lut = 0
-                elif em_img[y,x] < self.thres[0] and em_img[y,x] > -self.thres[1]:
-                    lut = self.gain[0] * em_img[y,x]
-                elif em_img[y,x] > self.thres[0] and em_img[y,x] < self.thres[1]:
-                    lut = 0
-                elif em_img[y,x] > self.thres[1]:
-                    lut = self.gain[1] * em_img[y,x]
-                # np.clip(lut, clip[0], clip[1], out=lut)
-                lut = max(self.emclip[0], min(lut / 256, self.emclip[1]))
-                
-                
-                ee_img[y,x] = img_pad[y+1,x+2] + lut
+        # Vectorized computation
+        lut = np.zeros_like(em_img)
+
+        # Compute lut based on conditions
+        mask1 = em_img < -self.thres[1]
+        mask2 = (em_img >= -self.thres[1]) & (em_img <= -self.thres[0])
+        mask3 = (em_img >= -self.thres[0]) & (em_img <= self.thres[0])
+        mask4 = (em_img >= self.thres[0]) & (em_img <= self.thres[1])
+        mask5 = em_img > self.thres[1]
+
+        lut[mask1] = self.gain[1] * em_img[mask1]
+        lut[mask2] = 0
+        lut[mask3] = self.gain[0] * em_img[mask3]
+        lut[mask4] = 0
+        lut[mask5] = self.gain[1] * em_img[mask5]
+
+        lut = np.clip(lut, self.emclip[0], self.emclip[1])        
+        ee_img = self.img + lut   
         np.clip(ee_img, 0, 255, out=ee_img)
         return ee_img, em_img
-    
+        
+           
 class BCC:
     def __init__(self, img, brightness, contrast, bcc_clip):
         self.img = img

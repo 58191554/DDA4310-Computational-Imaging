@@ -69,8 +69,8 @@ hue, saturation, hsc_clip, brightness, contrast, bcc_clip = 128, 256, 255, 10, 1
 rawimg = raw.raw_image 
 rawimg = np.clip(rawimg, raw.black_level_per_channel[0], 2**14)
 print(50*'-' + '\nLoading RAW Image Done......')
-plt.imshow(rawimg, cmap='gray')
-plt.show()
+# plt.imshow(rawimg, cmap='gray')
+# plt.show()
 
 #################################################################################################################
 #####################################  Part 1: Bayer Domain Processing Steps  ###################################
@@ -87,12 +87,12 @@ blkC = blackLevelCompensation(Bayer_dpc, parameter, bayer_pattern, clip = 2**14)
 Bayer_blackLevelCompensation = blkC.execute()
 print(50*'-' + '\n 1.2 Black Level Compensation Done......')
 
-# Step 3.'lens shading correction
-# skip this
+# # Step 3.'lens shading correction
+# # skip this
 
 # Step 4. Anti Aliasing Filter (10pts)
-antiAliasingFilter = antiAliasingFilter(Bayer_blackLevelCompensation)
-Bayer_antiAliasingFilter = antiAliasingFilter.execute()
+aaf = antiAliasingFilter(Bayer_blackLevelCompensation)
+Bayer_antiAliasingFilter = aaf.execute()
 print(50*'-' + '\n 1.4 Anti-aliasing Filtering Done......')
 
 
@@ -101,68 +101,75 @@ parameter = [r_gain, gr_gain, gb_gain, b_gain]
 awb = AWB(Bayer_antiAliasingFilter, parameter, bayer_pattern, awb_clip)
 Bayer_awb = awb.execute()
 print(50*'-' + '\n 1.5 White Balance Gain Done......')
-plt.imshow(Bayer_awb)
-plt.show()
+# plt.imshow(Bayer_awb)
+# plt.show()
 
-# Step 6. Chroma Noise Filtering (Extra 20pts)
-# cnf = ChromaNoiseFiltering(Bayer_awb, bayer_pattern, 0, parameter, cfa_clip)
-# Bayer_cnf = cnf.execute()
-# print(50*'-' + '\n 1.6 Chroma Noise Filtering Done......')
+# # Step 6. Chroma Noise Filtering (Extra 20pts)
+# # cnf = ChromaNoiseFiltering(Bayer_awb, bayer_pattern, 0, parameter, cfa_clip)
+# # Bayer_cnf = cnf.execute()
+# # print(50*'-' + '\n 1.6 Chroma Noise Filtering Done......')
 
 # Step 7. 'Color Filter Array Interpolation'  Malvar (20pts)
 cfa = CFA_Interpolation(Bayer_awb, cfa_mode, bayer_pattern, cfa_clip)
 rgbimg_cfa = cfa.execute()
+# stat_draw(rgbimg_cfa)
+rgbimg_cfa = normalize(rgbimg_cfa)
 print(50*'-' + '\n 1.7 Demosaicing Done......')
+# stat_draw(rgbimg_cfa)
+
+plt.imshow(rgbimg_cfa)
+plt.show()
 
 #####################################  Bayer Domain Processing end    ###########################################
 #################################################################################################################
 
 # Convert RGB to YUV (5pts)
-# rgbimg_cfa = cv2.imread("/home/tongzhen/workspace/DDA-ImageComputing/hw2/DSC00049.jpg")
 YUV = RGB2YUV(rgbimg_cfa)
 
-# #################################################################################################################
-# #####################################    Part 2: YUV Domain Processing Steps  ###################################
-# #################################################################################################################
+#################################################################################################################
+#####################################    Part 2: YUV Domain Processing Steps  ###################################
+#################################################################################################################
 
 # Step Luma-2  Edge Enhancement  for Luma (20pts)
-# img_rgb = cv2.imread("/home/tongzhen/workspace/DDA-ImageComputing/hw2/DSC00049.jpg")
-# YUV = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2YUV)
+img_rgb = cv2.imread("/home/tongzhen/workspace/DDA-ImageComputing/hw2/DSC00049.jpg")
+YUV = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2YUV)
 ee = EdgeEnhancement(YUV[:,:,0], edge_filter, ee_gain, ee_thres, ee_emclip)
 yuvimg_ee, yuvimg_edgemap = ee.execute()
 print(50*'-' + '\n 3.Luma.2  Edge Enhancement Done......')
+plt.imshow(yuvimg_ee)
+plt.show()
 
 
-# Step Luma-3 Brightness/Contrast Control (5pts)
-contrast = contrast / pow(2,5)    #[-32,128]
-bcc = BrightnessContrastControl(yuvimg_ee, brightness, contrast, bcc_clip)
-yuvimg_bcc = bcc.execute()
-print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
+# # Step Luma-3 Brightness/Contrast Control (5pts)
+# contrast = contrast / pow(2,5)    #[-32,128]
+# bcc = BrightnessContrastControl(yuvimg_ee, brightness, contrast, bcc_clip)
+# yuvimg_bcc = bcc.execute()
+# print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
  
-# # Step Chroma-1 False Color Suppresion (10pts)
-fcs = FalseColorSuppression(YUV[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
-yuvimg_fcs = fcs.execute()
-print(50*'-' + '\n 3.Chroma.1 False Color Suppresion Done......')
+# # # Step Chroma-1 False Color Suppresion (10pts)
+# fcs = FalseColorSuppression(YUV[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
+# yuvimg_fcs = fcs.execute()
+# print(50*'-' + '\n 3.Chroma.1 False Color Suppresion Done......')
 
-# Step Chroma-2 Hue/Saturation control (10pts)
-hsc = HueSaturationControl(yuvimg_fcs, hue, saturation, hsc_clip)
-yuvimg_hsc = hsc.execute()
-print(50*'-' + '\n 3.Chroma.2  Hue/Saturation Adjustment Done......')
+# # Step Chroma-2 Hue/Saturation control (10pts)
+# hsc = HueSaturationControl(yuvimg_fcs, hue, saturation, hsc_clip)
+# yuvimg_hsc = hsc.execute()
+# print(50*'-' + '\n 3.Chroma.2  Hue/Saturation Adjustment Done......')
 
 
-# # Concate Y UV Channels
-yuvimg_out = np.zeros_like(YUV) 
-yuvimg_out[:,:,0] = yuvimg_bcc
-# yuvimg_out[:,:,1:3] = YUV[:,:,1:3]
-yuvimg_out[:,:,1:3] = yuvimg_hsc
+# # # Concate Y UV Channels
+# yuvimg_out = np.zeros_like(YUV) 
+# yuvimg_out[:,:,0] = yuvimg_bcc
+# # yuvimg_out[:,:,1:3] = YUV[:,:,1:3]
+# yuvimg_out[:,:,1:3] = yuvimg_hsc
 
-RGB = YUV2RGB(yuvimg_out) # Pay attention to the bits
+# RGB = YUV2RGB(yuvimg_out) # Pay attention to the bits
 
-# #####################################   End YUV Domain Processing Steps  ###################################
-# #################################################################################################################
-print('ISP time cost : %.9f sec' %(time.time()-t_start)) 
+# # #####################################   End YUV Domain Processing Steps  ###################################
+# # #################################################################################################################
+# print('ISP time cost : %.9f sec' %(time.time()-t_start)) 
 
  
-cv2.imwrite("results.jpg", RGB) # save as 8-bit JPG image as "results.jpg"
+# cv2.imwrite("results.jpg", RGB) # save as 8-bit JPG image as "results.jpg"
 
 
