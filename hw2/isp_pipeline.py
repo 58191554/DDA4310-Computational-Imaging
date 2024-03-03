@@ -117,14 +117,16 @@ rgbimg_cfa = normalize(rgbimg_cfa)
 print(50*'-' + '\n 1.7 Demosaicing Done......')
 # stat_draw(rgbimg_cfa)
 
-plt.imshow(rgbimg_cfa)
-plt.show()
+# plt.imshow(rgbimg_cfa)
+# plt.show()
 
 #####################################  Bayer Domain Processing end    ###########################################
 #################################################################################################################
 
 # Convert RGB to YUV (5pts)
 YUV = RGB2YUV(rgbimg_cfa)
+# plt.imshow(YUV[:,:,0])
+# plt.show()
 
 #################################################################################################################
 #####################################    Part 2: YUV Domain Processing Steps  ###################################
@@ -136,20 +138,26 @@ YUV = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2YUV)
 ee = EdgeEnhancement(YUV[:,:,0], edge_filter, ee_gain, ee_thres, ee_emclip)
 yuvimg_ee, yuvimg_edgemap = ee.execute()
 print(50*'-' + '\n 3.Luma.2  Edge Enhancement Done......')
-plt.imshow(yuvimg_ee)
-plt.show()
+# plt.imshow(yuvimg_ee)
+# plt.show()
+
+# plt.imshow(normalize(yuvimg_edgemap))
+# plt.show()
 
 
-# # Step Luma-3 Brightness/Contrast Control (5pts)
-# contrast = contrast / pow(2,5)    #[-32,128]
-# bcc = BrightnessContrastControl(yuvimg_ee, brightness, contrast, bcc_clip)
-# yuvimg_bcc = bcc.execute()
-# print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
+# Step Luma-3 Brightness/Contrast Control (5pts)
+contrast = contrast / pow(2,5)    #[-32,128]
+bcc = BrightnessContrastControl(yuvimg_ee, brightness, contrast, bcc_clip)
+yuvimg_bcc = bcc.execute()
+print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
+
+# plt.imshow(yuvimg_bcc)
+# plt.show()
  
-# # # Step Chroma-1 False Color Suppresion (10pts)
-# fcs = FalseColorSuppression(YUV[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
-# yuvimg_fcs = fcs.execute()
-# print(50*'-' + '\n 3.Chroma.1 False Color Suppresion Done......')
+# # Step Chroma-1 False Color Suppresion (10pts)
+fcs = FalseColorSuppression(YUV[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
+yuvimg_fcs = fcs.execute()
+print(50*'-' + '\n 3.Chroma.1 False Color Suppresion Done......')
 
 # # Step Chroma-2 Hue/Saturation control (10pts)
 # hsc = HueSaturationControl(yuvimg_fcs, hue, saturation, hsc_clip)

@@ -224,58 +224,31 @@ def index_weighted_sum(arrays, indices, weights):
         result += w * arrays[i]
     return result
 
-def convolution3x5(image, kernel):
-    # Get dimensions of the image and the kernel
-    image_height, image_width = image.shape
-    kernel_height, kernel_width = kernel.shape
+def conv3x5(img, kernel:np.ndarray):
+    img_pad = np.pad(img, ((1, 1), (2, 2)), 'reflect')
+    y_indices, x_indices = np.meshgrid(np.arange(0, img.shape[0], dtype=np.int32), np.arange(0, img.shape[1], dtype=np.int32))
+    a1 = img_pad[y_indices, x_indices]
+    a2 = img_pad[y_indices, x_indices+1]
+    a3 = img_pad[y_indices, x_indices+2]
+    a4 = img_pad[y_indices, x_indices+3]
+    a5 = img_pad[y_indices, x_indices+4]
+    a6 = img_pad[y_indices+1, x_indices]
+    a7 = img_pad[y_indices+1, x_indices+1]
+    a8 = img_pad[y_indices+1, x_indices+2]
+    a9 = img_pad[y_indices+1, x_indices+3]
+    a10 = img_pad[y_indices+1, x_indices+4]
+    a11 = img_pad[y_indices+2, x_indices]
+    a12 = img_pad[y_indices+2, x_indices+1]
+    a13 = img_pad[y_indices+2, x_indices+2]
+    a14 = img_pad[y_indices+2, x_indices+3]
+    a15 = img_pad[y_indices+2, x_indices+4]
     
-    # Get the output dimensions
-    output_height = image_height - kernel_height + 1
-    output_width = image_width - kernel_width + 1
-    
-    # Generate indices for all possible positions of the kernel
-    rows = np.arange(kernel_height)[:, None] + np.arange(output_height)
-    cols = np.arange(kernel_width)[:, None] + np.arange(output_width)
-    
-    # Extract regions from the image using the generated indices
-    regions = image[rows, :, None, cols]
-    
-    # Perform element-wise multiplication and sum along specified axes
-    output = np.tensordot(regions, kernel, axes=([1, 3], [0, 1]))
-    
-    return output
+    kernel = kernel.flatten()
+    weighted_sum = np.sum(kernel[:, np.newaxis, np.newaxis] * np.array([a1, a2, a3, a4, a5,
+                                                                    a6, a7, a8, a9, a10,
+                                                                    a11, a12, a13, a14, a15]), axis=0)
 
-def convolution3x5_grey(image, kernel):
-    # TODO
-    pass
-
-def convolve2d(image, kernel):
-    # Get dimensions of the image and kernel
-    image_height, image_width = image.shape
-    kernel_height, kernel_width = kernel.shape
-    
-    # Calculate padding sizes
-    pad_height = kernel_height // 2
-    pad_width = kernel_width // 2
-    
-    # Pad the image
-    padded_image = np.pad(image, ((pad_height, pad_height), (pad_width, pad_width)), mode='constant')
-    
-    # Generate indices for all possible positions of the kernel
-    indices_i = np.arange(kernel_height)[:, None] + np.arange(image_height)[None, :] - pad_height
-    indices_j = np.arange(kernel_width)[None, :] + np.arange(image_width)[:, None] - pad_width
-    print("indices_i")
-    print(indices_i)
-    print("indices_j")
-    print(indices_j)
-
-    # Extract regions from the padded image using the generated indices
-    regions = padded_image[indices_i[:, :, None], indices_j[None, :, :]]
-    print(regions)
-    # Perform element-wise multiplication and sum along specified axes
-    convolved_image = np.sum(regions * kernel[:, :, None, None], axis=(0, 2))
-    
-    return convolved_image
+    return weighted_sum
 
 if __name__ == "__main__":
     # kernel = np.array([[1, 2, 3, 4, 5],

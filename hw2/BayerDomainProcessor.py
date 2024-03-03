@@ -269,7 +269,7 @@ class CFA:
         
         # Generate indices for accessing elements
         y_indices, x_indices = np.meshgrid(np.arange(0, img_pad.shape[0]-4-1, 2), np.arange(0, img_pad.shape[1]-4-1, 2))
-        # Default as rggb malvar
+        # Default as rggb malvar            
         r = img_pad[y_indices + 2, x_indices + 2]
         gr = img_pad[y_indices + 2, x_indices + 3]
         gb = img_pad[y_indices + 3, x_indices + 2]

@@ -50,7 +50,7 @@ def HueSaturationControl(yuvimg_fcs, hue, saturation, hsc_clip):
 class EE:
     def __init__(self, img, edge_filter, ee_gain, ee_thres, ee_emclip):
         self.img = img
-        self.edge_filter = edge_filter
+        self.edge_filter = edge_filter/8
         self.gain = ee_gain
         self.thres = ee_thres
         self.emclip = ee_emclip
@@ -84,11 +84,8 @@ class EE:
         # np.clip(ee_img, 0, 255, out=ee_img)
         # return ee_img, em_img
         
-        img_pad = np.pad(self.img, ((1, 1), (2, 2)), 'reflect')
-        h, w = img_pad.shape[0], img_pad.shape[1]
-        em_img = np.empty((h, w), np.int16)
-        em_img = convolution3x5_grey(img_pad, self.edge_filter)
-
+        em_img = conv3x5(self.img, self.edge_filter)
+        em_img = np.transpose(em_img)
         # Vectorized computation
         lut = np.zeros_like(em_img)
 
@@ -101,7 +98,7 @@ class EE:
 
         lut[mask1] = self.gain[1] * em_img[mask1]
         lut[mask2] = 0
-        lut[mask3] = self.gain[0] * em_img[mask3]
+        lut[mask3] = -self.gain[0] * em_img[mask3]
         lut[mask4] = 0
         lut[mask5] = self.gain[1] * em_img[mask5]
 
@@ -110,7 +107,9 @@ class EE:
         np.clip(ee_img, 0, 255, out=ee_img)
         return ee_img, em_img
         
-           
+    
+    
+     
 class BCC:
     def __init__(self, img, brightness, contrast, bcc_clip):
         self.img = img
@@ -149,6 +148,10 @@ class FCS:
                 fcs_img[y,x,:] = uvgain * (self.img[y,x,:]) / 256 + 128
         np.clip(fcs_img, 0, 255, out=fcs_img)
         return fcs_img
+    
+        
+    
+
     
 class HSC:
     def __init__(self, img, hue, saturation, hsc_clip):
