@@ -76,7 +76,11 @@ $$
 
 ## RGB2YUV
 
-We need to change to YUV for the further process but not direct using RGB, because YUV can separate the Chroma(color information`Cr` , `Cb`) and Luma(intensity information `Y`)
+### Idea
+
+We need to change to YUV for the further process but not direct using RGB, because YUV can separate the Chroma(color information`Cr` , `Cb`) and Luma(intensity information `Y`). Notice that the matrix transform of range `[0, 1]` and `[0, 255]` is different, here our RGB range is `[0, 255]`
+
+
 
 ### Acceleration
 
@@ -97,6 +101,10 @@ In the following content, when we show the `YUV` output, we are actually showing
 
 ![](./data/YUV.png)
 
+We can draw the histogram of the `YUV` channels, to monitor the shape change of the distribution later.
+
+<img src="./data/cfa_yuv_stat.png" style="zoom:50%;" />
+
 ## Edge Enhancement
 
 ### Idea
@@ -109,7 +117,7 @@ f(x) = \begin{cases}
     -32x & \text{if } -32 < x < 32 \\
     0 & \text{if } 32 < x < 64 \\
     128x & \text{if } x > 64
-\end{cases}
+\end{cases}
 $$
 <img src="./data/EMLUT(x).png" style="zoom:50%;" />
 
@@ -159,6 +167,8 @@ lut[mask5] = self.gain[1] * em_img[mask5]
 
 ### Output
 
+<img src="./data/ee_stat.png" style="zoom:50%;" />
+
 After computing the `EMLUT(x)`, clip the `EMLUT(x)` and add  it to the image as an output:
 
 ![](./data/ee_ee.png)
@@ -169,24 +179,99 @@ After computing the `EMLUT(x)`, clip the `EMLUT(x)` and add  it to the image as 
 
 Brightness control is :
 $$
-Y = Y+\text{brightness}+(Y-127)\times\text{contrast}
+Y = (\frac{\alpha Y+\beta-16}{235})^\gamma\times235+16
 $$
+
+This operation is first move the distribution to the right of `brightness` scale, and then enlarge the variance with `contrast` scale. Here, we take small brightness, and contrast, because we import the gamma correction to balance, 
+
+<img src="./data/gamma.png" style="zoom:50%;" />
+
+In the histogram above, we can observe that there is a high frequent around 30-40, therefore, 
+
+Notice that now the clip range is no longer  `[16, 235]`, the `Y` channel is in range of `[16, 235]`. 
+
+
 
 ### Output
 
 In the output image, the sky is brighter, and the shade of tree is darker (left of the image)
 
+<img src="./data/bcc_stat.png" style="zoom:50%;" />
+
 ![](./data/bcc.png)
 
+## False Color Suppression
+
+### Idea
+
+First compute the gain of `u` dimension and `v` dimension by this piecewise function:
+$$
+gain_{u, v}(x, y) = \begin{cases} 
+    \text{gain} &  
+    |\text{edgemap}(y, x)| \leq \text{fcsEdge}_1 \\
+    \text{intercept} - \text{slope} \times \text{edgemap}(y, x) & 
+    \text{fcsEdge}_1 < |\text{edgemap}(y, x)| < \text{fcsEdge}_2 \\
+    0 & |\text{edgemap}(y, x)| \geq \text{fcsEdge}_2
+\end{cases}\\
+
+Y' = \frac{gain_{u, v}\times Y}{256} + 128
+$$
+
+### Acceleration
+
+Again use the mask boolean indices to assign the value in a vectorization way:
+
+```python
+mask1 = np.abs(self.edgemap) <= self.fcs_edge[0]
+mask2 = np.logical_and(
+    np.abs(self.edgemap) > self.fcs_edge[0], 
+    np.abs(self.edgemap) < self.fcs_edge[1])
+mask3 = np.abs(self.edgemap) >= self.fcs_edge[1]
+        
+uvgain = np.empty((h, w, c), np.int16)
+uvgain[mask1] = self.gain
+uvgain[mask2, 0] = self.intercept - self.slope * self.edgemap[mask2]
+uvgain[mask2, 1] = self.intercept - self.slope * self.edgemap[mask2]      
+uvgain[mask3] = 0
+```
+
+### Output
+
+<img src="./data/fcs_stat.png" style="zoom:50%;" />
+
+![](./data/fcs.png)
+
+## Hue/Saturation control
+
+### Idea
+
+HSC is in two step: the Hue control, and the Saturation control. In the Hue tuning, the two channels range are first moved from `[0-256]` to `[-128, 128] `, then using the sine of Hue parameter to get the new `Cr`, and `Cb` channel value.
+$$
+Y_{Cr}’ = (Y_{Cr}-128)\times\cos(h)+(Y_{Cb}-128)\times \sin(h) + 128\\
+Y_{Cb}’ = (Y_{Cb}-128)\times\cos(h)+(Y_{Cr}-128)\times \sin(h) + 128
+$$
+Then in the Saturation control step, with a linear transform, we can output the tuned image of UV channels:
+$$
+Y = \frac{s(Y-128)}{256}+128
+$$
+
+### Output
+
+In the image below, we can observe both Cr and Cb showed more details, and more contrast.
+
+<img src="./data/hsc_stat.png" style="zoom:50%;" />
+
+![](./data/hsc.png)
+
+### Normalize and output the RBG
+
+After all, assign the `Y` channel as the BCC output, and assign the `Cr`, `Cb` channel as the HSC output.
+
+![](./data/output_stat.png)
 
 
 
-
-
-
-
-
-
+## How to Run
 
 
 
@@ -201,3 +286,4 @@ In the output image, the sky is brighter, and the shade of tree is darker (left 
 - FastOpenISP: https://github.com/QiuJueqin/fast-openISP?tab=readme-ov-file
 - OpenISP: https://github.com/cruxopen/openISP
 
+- Opencv BCC: https://docs.opencv.org/3.4/d3/dc1/tutorial_basic_linear_transform.html

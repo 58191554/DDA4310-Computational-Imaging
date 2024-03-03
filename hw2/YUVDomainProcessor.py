@@ -5,35 +5,27 @@ from tqdm import tqdm
 from utils import *
 
 def RGB2YUV(img:np.ndarray):
-    matrix = np.array([[66, 129, 25],
-                       [-38, -74, 112],
-                       [112, -94, -18]], dtype=np.int32).T  # x256
-    bias = np.array([16, 128, 128], dtype=np.int32).reshape(1, 1, 3)
-    rgb_image = img.astype(np.int32)
+    matrix = np.array([[0.257, 0.504, 0.098],
+                       [0.439, -0.368, -0.071],
+                       [-0.148, -0.291, 0.439]], dtype=np.float32)  # x256
+    bias = np.array([16, 128, 128], dtype=np.float32).reshape(1, 1, 3)
+    rgb_image = img.astype(np.float32)
 
-    ycrcb_image = (np.right_shift(rgb_image @ matrix, 8) + bias).astype(np.uint8)
+    ycrcb_image = (rgb_image @ matrix + bias).astype(np.uint8)
 
     return ycrcb_image
 
 def YUV2RGB(img: np.ndarray):
     # Y'UV to RGB conversion matrix
-    yuv_to_rgb_matrix = np.array([[1.000, 1.000, 1.000],
-                                  [0.000, -0.394, 2.032],
-                                  [1.140, -0.581, 0.000]])
+    matrix = np.array([
+        [1.164, 1.5958, -0.0018],
+        [1.164, -0.8135, -0.3914],
+        [1.164, -0.0012, 2.0178]], dtype=np.float32)
+    bias = np.array([16, 128, 128], dtype=np.float32).reshape(1, 1, 3)
+    yuv_image = img.astype(np.int32)
     
-    # Convert YUV image to float32
-    yuv_image_float = img.astype(np.float32) / 255.0
-    
-    # Apply matrix multiplication for conversion
-    rgb_image_float = np.dot(yuv_image_float, yuv_to_rgb_matrix.T)
-    
-    # Clip values to the valid range [0, 255]
-    rgb_image_float = np.clip(rgb_image_float, 0, 1)
-    
-    # Scale back to the range [0, 255] and convert to uint8
-    rgb_image_uint8 = (rgb_image_float * 255).astype(np.uint8)
-    
-    return rgb_image_uint8
+    rbg_image = ((yuv_image - bias) @ matrix).astype(np.uint8)
+    return rbg_image
 
 def EdgeEnhancement(yuv_img:np.ndarray, edge_filter:np.ndarray, ee_gain:list, ee_thres:list, ee_emclip:list):
     return EE(yuv_img, edge_filter, ee_gain, ee_thres, ee_emclip)
@@ -82,7 +74,7 @@ class EE:
                 
         #         ee_img[y,x] = img_pad[y+1,x+2] + lut
         # np.clip(ee_img, 0, 255, out=ee_img)
-        # return ee_img, em_img
+        # return ee_img[1:-1, 2:-2], em_img[1:-1, 2:-2]
         
         em_img = conv3x5(self.img, self.edge_filter)
         em_img = np.transpose(em_img)
@@ -102,28 +94,38 @@ class EE:
         lut[mask4] = 0
         lut[mask5] = self.gain[1] * em_img[mask5]
 
-        lut = np.clip(lut, self.emclip[0], self.emclip[1])        
+        # 可能问题在这里。。
+        # np.clip(lut, clip[0], clip[1], out=lut)
+        lut = np.maximum(self.emclip[0], np.minimum(lut / 256, self.emclip[1]))
         ee_img = self.img + lut   
         np.clip(ee_img, 0, 255, out=ee_img)
         return ee_img, em_img
         
-    
-    
-     
 class BCC:
-    def __init__(self, img, brightness, contrast, bcc_clip):
+    def __init__(self, img, brightness, contrast, bcc_clip, saturation_values = 300):
         self.img = img
         self.brightness = brightness
         self.contrast = contrast
         self.clip = bcc_clip
+        self.saturation_values = saturation_values
     
     def execute(self):
-        h, w = self.img.shape[0], self.img.shape[1]
-        bcc_img = np.empty((h, w), np.int16)
-        bcc_img = self.img + self.brightness
-        bcc_img = bcc_img + (self.img - 127) * self.contrast
-        np.clip(bcc_img, 0, self.clip, out=bcc_img)
-        return bcc_img[1:-1, 2:-2]
+        # h, w = self.img.shape[0], self.img.shape[1]
+        # bcc_img = np.empty((h, w), np.int16)
+        # bcc_img = self.img + self.brightness + (self.img - 127) * self.contrast
+        # np.clip(bcc_img, self.clip[0], self.clip[1], out=bcc_img)
+        # return bcc_img
+        
+        y_image = self.img.astype(np.int32)
+
+        bcc_y_image = np.clip(y_image + self.brightness, 0, self.saturation_values)
+
+        y_median = np.median(bcc_y_image).astype(np.int32)
+        bcc_y_image = (bcc_y_image - y_median) * self.contrast + y_median
+        bcc_y_image = np.clip(bcc_y_image, 0, self.saturation_values)
+
+        bcc_y_image = bcc_y_image.astype(np.uint8)
+        return bcc_y_image
         
 class FCS:
     def __init__(self, ee_img, em_map, fcs_edge, fcs_gain, fcs_intercept, fcs_slope):
@@ -137,21 +139,34 @@ class FCS:
     def execute(self):
         h, w, c = self.img.shape
         fcs_img = np.empty((h, w, c), np.int16)
-        for y in tqdm(range(h)):
-            for x in range(w):
-                if np.abs(self.edgemap[y,x]) <= self.fcs_edge[0]:
-                    uvgain = self.gain
-                elif np.abs(self.edgemap[y,x]) > self.fcs_edge[0] and np.abs(self.edgemap[y,x]) < self.fcs_edge[1]:
-                    uvgain = self.intercept - self.slope * self.edgemap[y,x]
-                else:
-                    uvgain = 0
-                fcs_img[y,x,:] = uvgain * (self.img[y,x,:]) / 256 + 128
-        np.clip(fcs_img, 0, 255, out=fcs_img)
-        return fcs_img
+        # for y in tqdm(range(h)):
+        #     for x in range(w):
+        #         if np.abs(self.edgemap[y,x]) <= self.fcs_edge[0]:
+        #             uvgain = self.gain
+        #         elif np.abs(self.edgemap[y,x]) > self.fcs_edge[0] and np.abs(self.edgemap[y,x]) < self.fcs_edge[1]:
+        #             uvgain = self.intercept - self.slope * self.edgemap[y,x]
+        #         else:
+        #             uvgain = 0
+        #         fcs_img[y,x,:] = uvgain * (self.img[y,x,:]) / 256 + 128
+        # np.clip(fcs_img, 0, 255, out=fcs_img)
+        # return fcs_img
     
+        mask1 = np.abs(self.edgemap) <= self.fcs_edge[0]
+        mask2 = np.logical_and(
+            np.abs(self.edgemap) > self.fcs_edge[0], 
+            np.abs(self.edgemap) < self.fcs_edge[1])
+        mask3 = np.abs(self.edgemap) >= self.fcs_edge[1]
         
-    
-
+        uvgain = np.empty((h, w, c), np.int16)
+        uvgain[mask1] = self.gain
+        uvgain[mask2, 0] = self.intercept - self.slope * self.edgemap[mask2]
+        uvgain[mask2, 1] = self.intercept - self.slope * self.edgemap[mask2]      
+        uvgain[mask3] = 0
+        
+        fcs_img = uvgain * (self.img) / 256 + 128
+        # np.clip(fcs_img, 0, 255, out=fcs_img)
+        np.clip(fcs_img, 16,239, out=fcs_img)
+        return fcs_img    
     
 class HSC:
     def __init__(self, img, hue, saturation, hsc_clip):
@@ -161,18 +176,31 @@ class HSC:
         self.clip = hsc_clip
 
     def execute(self):
-        # 需要改。。。
-        ind = np.array([i for i in range(360)])
-        sin = np.sin(ind * np.pi / 180) * 256
-        cos = np.cos(ind * np.pi / 180) * 256
-        lut_sin = dict(zip(ind, [round(sin[i]) for i in ind])) # 需要改。。。
-        lut_cos = dict(zip(ind, [round(cos[i]) for i in ind])) # 需要改。。。
+        # ind = np.array([i for i in range(360)])
+        # sin = np.sin(ind * np.pi / 180) * 256
+        # cos = np.cos(ind * np.pi / 180) * 256
+        # lut_sin = dict(zip(ind, [round(sin[i]) for i in ind]))
+        # lut_cos = dict(zip(ind, [round(cos[i]) for i in ind]))
+        # hsc_img = np.empty(self.img.shape, np.int16)
+        # hsc_img[:,:,0] = (self.img[:,:,0] - 128) * lut_cos[self.hue] + (self.img[:,:,1] - 128) * lut_sin[self.hue] + 128
+        # hsc_img[:,:,1] = (self.img[:,:,1] - 128) * lut_cos[self.hue] - (self.img[:,:,0] - 128) * lut_sin[self.hue] + 128
+        # hsc_img[:,:,0] = self.saturation * (self.img[:,:,0] - 128) / 256 + 128
+        # hsc_img[:,:,1] = self.saturation * (self.img[:,:,1] - 128) / 256 + 128
+        # np.clip(hsc_img, 0, self.clip, out=hsc_img)
+        # return hsc_img
+       
         hsc_img = np.empty(self.img.shape, np.int16)
-        hsc_img[:,:,0] = (self.img[:,:,0] - 128) * lut_cos[self.hue] + (self.img[:,:,1] - 128) * lut_sin[self.hue] + 128
-        hsc_img[:,:,1] = (self.img[:,:,1] - 128) * lut_cos[self.hue] - (self.img[:,:,0] - 128) * lut_sin[self.hue] + 128
+        sin_hue = round(np.sin(self.hue))
+        cos_hue = round(np.cos(self.hue))
+        hsc_img[:,:,0] = (self.img[:, :, 0]-128) * cos_hue + (self.img[:, :, 1]-128)*sin_hue + 128
+        hsc_img[:,:,1] = (self.img[:, :, 1]-128) * cos_hue + (self.img[:, :, 0]-128)*sin_hue + 128
+        
         hsc_img[:,:,0] = self.saturation * (self.img[:,:,0] - 128) / 256 + 128
         hsc_img[:,:,1] = self.saturation * (self.img[:,:,1] - 128) / 256 + 128
-        np.clip(hsc_img, 0, self.clip, out=hsc_img)
+        
+        # np.clip(hsc_img, 0, self.clip, out=hsc_img)
+        np.clip(hsc_img, 16,239, out=hsc_img)
+        
         return hsc_img
         
 if __name__ == "__main__":

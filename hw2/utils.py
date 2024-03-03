@@ -203,10 +203,36 @@ def stat_draw(img:np.ndarray):
     # Show the plot
     plt.show()
 
+def stat_draw_yuv(y:np.ndarray, uv:np.ndarray):
+    fig, axs = plt.subplots(1, 3, figsize=(10, 8))
+
+    # Plot histograms
+    axs[0].hist(y[:, :].flatten(), bins=30, edgecolor='black')
+    axs[0].set_title('Y Channel Histogram')
+    axs[0].set_xlabel('Value')
+    axs[0].set_ylabel('Frequency')
+
+    axs[1].hist(uv[:, :, 0].flatten(), bins=30, edgecolor='black', color='r')
+    axs[1].set_title('Cr Channel Histogram')
+    axs[1].set_xlabel('Value')
+    axs[1].set_ylabel('Frequency')
+
+    axs[2].hist(uv[:, :, 1].flatten(), bins=30, edgecolor='black', color='b')
+    axs[2].set_title('Cb Channel Histogram')
+    axs[2].set_xlabel('Value')
+    axs[2].set_ylabel('Frequency')
+
+
+    # Adjust layout to prevent overlapping
+    plt.tight_layout()
+
+    # Show the plot
+    plt.show()
+
 def normalize(img, scale = 3000):
     # 找到每个通道的最小值和最大值
     img = img.astype(np.float32)
-    img /= scale
+    # img /= scale
     min_vals = np.min(img, axis=(0, 1))
     max_vals = np.max(img, axis=(0, 1))
     
@@ -251,25 +277,10 @@ def conv3x5(img, kernel:np.ndarray):
     return weighted_sum
 
 if __name__ == "__main__":
-    # kernel = np.array([[1, 2, 3, 4, 5],
-    #                   [6, 7, 8, 9, 10],
-    #                   [11, 12, 13, 14, 15],
-    #                   [16, 17, 18, 19, 20]])
-    # img = np.array([[1, 0, -1],
-    #                    [2, 0, -2],
-    #                    [1, 0, -1]])
-    
-    # a = convolution3x5_grey(img, kernel)
-    # print(a)
-    
-    # Example usage:
-    image = np.array([[1, 2, 3],
-                      [4, 5, 6],
-                      [7, 8, 9]])
-
-    kernel = np.array([[1, 0, -1],
-                       [1, 0, -1],
-                       [1, 0, -1]])
-
-    result = convolve2d(image, kernel)
-    print(result)
+    img = np.array([[1]])
+    kernel = np.array([
+        [1, 2, 3, 4, 5],
+        [6, 7, 8, 9, 10],
+        [11, 12, 13, 14, 15]
+    ])
+    print(conv3x5(img, kernel))

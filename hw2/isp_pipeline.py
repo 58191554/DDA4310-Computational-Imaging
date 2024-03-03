@@ -61,7 +61,8 @@ ee_gain, ee_thres, ee_emclip = [32, 128],  [32, 64], [-64, 64]
 dpc_thres, dpc_mode, dpc_clip  = 30, 'gradient', 4095
 fcs_edge, fcs_gain, fcs_intercept, fcs_slope = [32, 32], 32, 2, 3
 nlm_h,nlm_clip = 15, 255
-hue, saturation, hsc_clip, brightness, contrast, bcc_clip = 128, 256, 255, 10, 10, 255
+hue, saturation = 128, 256
+hsc_clip, brightness, contrast, bcc_clip = 255, 5, 10, [16, 235]
 
             
 
@@ -125,6 +126,10 @@ print(50*'-' + '\n 1.7 Demosaicing Done......')
 
 # Convert RGB to YUV (5pts)
 YUV = RGB2YUV(rgbimg_cfa)
+# RGB= YUV2RGB(YUV)
+# plt.imshow(RGB)
+# plt.show()
+# stat_draw_yuv(YUV[:, :, 0], YUV[:, :, 1:])
 # plt.imshow(YUV[:,:,0])
 # plt.show()
 
@@ -133,48 +138,150 @@ YUV = RGB2YUV(rgbimg_cfa)
 #################################################################################################################
 
 # Step Luma-2  Edge Enhancement  for Luma (20pts)
-img_rgb = cv2.imread("/home/tongzhen/workspace/DDA-ImageComputing/hw2/DSC00049.jpg")
-YUV = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2YUV)
 ee = EdgeEnhancement(YUV[:,:,0], edge_filter, ee_gain, ee_thres, ee_emclip)
 yuvimg_ee, yuvimg_edgemap = ee.execute()
 print(50*'-' + '\n 3.Luma.2  Edge Enhancement Done......')
-# plt.imshow(yuvimg_ee)
-# plt.show()
+# stat_draw_yuv(yuvimg_ee, YUV[:, :, 1:])
 
-# plt.imshow(normalize(yuvimg_edgemap))
-# plt.show()
+# plt.subplot(2, 2, 1)
+# plt.imshow(YUV[:,:,0])  
+# plt.title('Before EE')
 
+# plt.subplot(2, 2, 2)
+# plt.imshow(rgbimg_cfa)
+# plt.title("Before EE")
+
+YUV[:, :, 0] = yuvimg_ee
+ee_RGB = YUV2RGB(YUV)
+ee_RGB = normalize(ee_RGB)
+
+# plt.subplot(2, 2, 3)
+# plt.imshow(yuvimg_ee)  
+# plt.title('After EE')
+
+# plt.subplot(2, 2, 4)
+# plt.imshow(ee_RGB)
+# plt.title("After EE")
+
+# plt.show()
 
 # Step Luma-3 Brightness/Contrast Control (5pts)
-contrast = contrast / pow(2,5)    #[-32,128]
-bcc = BrightnessContrastControl(yuvimg_ee, brightness, contrast, bcc_clip)
+bcc = BrightnessContrastControl(yuvimg_ee, brightness, contrast=0.4, bcc_clip)
 yuvimg_bcc = bcc.execute()
-print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
+print(50*'-' + '\n 3.Luma.3 Brightness/Contrast Adjustment Done......')
+stat_draw_yuv(yuvimg_bcc, YUV[:, :, 1:])
 
-# plt.imshow(yuvimg_bcc)
-# plt.show()
+plt.subplot(2, 2, 1)
+plt.imshow(yuvimg_ee)  
+plt.title('Y Before BCC')
+
+plt.subplot(2, 2, 2)
+plt.imshow(ee_RGB)
+plt.title("RBG Before BCC")
+
+YUV[:, :, 0] = yuvimg_bcc
+bcc_RGB = YUV2RGB(YUV)
+bcc_RGB = normalize(bcc_RGB)
+
+plt.subplot(2, 2, 3)
+plt.imshow(yuvimg_bcc)  
+plt.title('Y After BCC')
+
+plt.subplot(2, 2, 4)
+plt.imshow(bcc_RGB)
+plt.title("RBG After BCC")
+
+plt.show()
  
-# # Step Chroma-1 False Color Suppresion (10pts)
-fcs = FalseColorSuppression(YUV[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
-yuvimg_fcs = fcs.execute()
-print(50*'-' + '\n 3.Chroma.1 False Color Suppresion Done......')
+ 
+# # # Step Chroma-1 False Color Suppresion (10pts)
+# fcs = FalseColorSuppression(YUV[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
+# yuvimg_fcs = fcs.execute()
+# print(50*'-' + '\n 3.Chroma.1 False Color Suppresion Done......')
+# stat_draw_yuv(yuvimg_bcc, yuvimg_fcs)
+
+
+# plt.subplot(2, 3, 1)
+# plt.imshow(YUV[:,:,1])
+# plt.title("Cr before FCS")
+
+# plt.subplot(2, 3, 2)
+# plt.imshow(YUV[:,:,2])
+# plt.title("Cb before FCS")
+
+# plt.subplot(2, 3, 3)
+# plt.imshow(bcc_RGB)
+# plt.title("RBG before FCS")
+
+# YUV[:, :, 1] = yuvimg_fcs[:, :, 0]
+# YUV[:, :, 2] = yuvimg_fcs[:, :, 1]
+# fcs_RBG = YUV2RGB(YUV)
+# fcs_RGB = normalize(fcs_RBG)
+
+# plt.subplot(2, 3, 4)
+# plt.imshow(yuvimg_fcs[:, :, 0])
+# plt.title("Cr after FCS")
+
+# plt.subplot(2, 3, 5)
+# plt.imshow(yuvimg_fcs[:, :, 1])
+# plt.title("Cb after FCS")
+
+# plt.subplot(2, 3, 6)
+# plt.imshow(fcs_RBG)
+# plt.title("RBG after FCS")
+
+# plt.show()
+
 
 # # Step Chroma-2 Hue/Saturation control (10pts)
 # hsc = HueSaturationControl(yuvimg_fcs, hue, saturation, hsc_clip)
 # yuvimg_hsc = hsc.execute()
 # print(50*'-' + '\n 3.Chroma.2  Hue/Saturation Adjustment Done......')
+# # stat_draw_yuv(yuvimg_bcc, yuvimg_hsc)
 
+# fcs_RBG = YUV2RGB(YUV)
+# plt.subplot(2, 3, 1)
+# plt.imshow(yuvimg_fcs[:, :, 0])
+# plt.title("Cr before HSC")
 
-# # # Concate Y UV Channels
+# plt.subplot(2, 3, 2)
+# plt.imshow(yuvimg_fcs[:, :, 1])
+# plt.title("Cb before HSC")
+
+# plt.subplot(2, 3, 3)
+# plt.imshow(fcs_RGB)
+# plt.title("RBG before HSC")
+
+# YUV[:, :, 1] = yuvimg_hsc[:, :, 0]
+# YUV[:, :, 2] = yuvimg_hsc[:, :, 1]
+# hsc_RGB = YUV2RGB(YUV)
+# hsc_RGB = normalize(hsc_RGB)
+
+# plt.subplot(2, 3, 4)
+# plt.imshow(yuvimg_hsc[:, :, 0])
+# plt.title("Cr after HSC")
+
+# plt.subplot(2, 3, 5)
+# plt.imshow(yuvimg_hsc[:, :, 1])
+# plt.title("Cb after HSC")
+
+# plt.subplot(2, 3, 6)
+# plt.imshow(hsc_RGB)
+# plt.title("RBG after HSC")
+
+# plt.show()
+
+# # Concate Y UV Channels
 # yuvimg_out = np.zeros_like(YUV) 
 # yuvimg_out[:,:,0] = yuvimg_bcc
-# # yuvimg_out[:,:,1:3] = YUV[:,:,1:3]
 # yuvimg_out[:,:,1:3] = yuvimg_hsc
-
+# # stat_draw(yuvimg_out)
 # RGB = YUV2RGB(yuvimg_out) # Pay attention to the bits
+# RGB = normalize(RGB)
+# stat_draw(RGB)
 
-# # #####################################   End YUV Domain Processing Steps  ###################################
-# # #################################################################################################################
+# # # #####################################   End YUV Domain Processing Steps  ###################################
+# # # #################################################################################################################
 # print('ISP time cost : %.9f sec' %(time.time()-t_start)) 
 
  
