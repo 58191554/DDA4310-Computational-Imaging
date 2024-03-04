@@ -118,10 +118,12 @@ class BCC:
         
         y_image = self.img.astype(np.int32)
 
-        bcc_y_image = np.clip(y_image + self.brightness, 0, self.saturation_values)
+        # bcc_y_image = np.clip(y_image + self.brightness, 0, self.saturation_values)
 
-        y_median = np.median(bcc_y_image).astype(np.int32)
-        bcc_y_image = (bcc_y_image - y_median) * self.contrast + y_median
+        # y_median = np.median(bcc_y_image).astype(np.int32)
+        # print(y_median)
+        # bcc_y_image = (bcc_y_image - y_median) * self.contrast + y_median
+        bcc_y_image = y_image * self.contrast + self.brightness
         bcc_y_image = np.clip(bcc_y_image, 0, self.saturation_values)
 
         bcc_y_image = bcc_y_image.astype(np.uint8)
@@ -151,19 +153,18 @@ class FCS:
         # np.clip(fcs_img, 0, 255, out=fcs_img)
         # return fcs_img
     
-        mask1 = np.abs(self.edgemap) <= self.fcs_edge[0]
+        absEM = np.abs(self.edgemap)
+        mask1 = absEM <= self.fcs_edge[0]
         mask2 = np.logical_and(
-            np.abs(self.edgemap) > self.fcs_edge[0], 
-            np.abs(self.edgemap) < self.fcs_edge[1])
-        mask3 = np.abs(self.edgemap) >= self.fcs_edge[1]
+            absEM > self.fcs_edge[0], 
+            absEM < self.fcs_edge[1])
+        mask3 = absEM >= self.fcs_edge[1]
         
-        uvgain = np.empty((h, w, c), np.int16)
-        uvgain[mask1] = self.gain
-        uvgain[mask2, 0] = self.intercept - self.slope * self.edgemap[mask2]
-        uvgain[mask2, 1] = self.intercept - self.slope * self.edgemap[mask2]      
-        uvgain[mask3] = 0
+        fcs_img[mask1] = self.img[mask1]
+        fcs_img[mask2, 0] = self.gain*(absEM[mask2]-128)/65536 + 128
+        fcs_img[mask2, 1] = self.gain*(absEM[mask2]-128)/65536 + 128    
+        fcs_img[mask3] = 0
         
-        fcs_img = uvgain * (self.img) / 256 + 128
         # np.clip(fcs_img, 0, 255, out=fcs_img)
         np.clip(fcs_img, 16,239, out=fcs_img)
         return fcs_img    

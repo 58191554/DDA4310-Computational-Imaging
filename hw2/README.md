@@ -179,22 +179,28 @@ After computing the `EMLUT(x)`, clip the `EMLUT(x)` and add  it to the image as 
 
 Brightness control is :
 $$
-Y = (\frac{\alpha Y+\beta-16}{235})^\gamma\times235+16
+Y\times\text{contrast}+\text{brightess}\\
+i.e.\ \alpha Y +\beta
 $$
 
-This operation is first move the distribution to the right of `brightness` scale, and then enlarge the variance with `contrast` scale. Here, we take small brightness, and contrast, because we import the gamma correction to balance, 
+This operation is first move the distribution to the right of `brightness` scale, and then enlarge the variance with `contrast` scale. In the example image, I choose brightness as 12.3208, and contrast = 0.9249. 
 
-<img src="./data/gamma.png" style="zoom:50%;" />
+Here we minus the median value to control the moving shape of the distribution. One tips here for the adjustment of the parameter is that you can first pin some point of the distribution, and the calculate the parameter using the [least square method](https://zh.wikipedia.org/wiki/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98%E6%B3%95).
 
-In the histogram above, we can observe that there is a high frequent around 30-40, therefore, 
+In the histogram above, we can observe that there is a high frequent around 30-40, and we don't want the high value part moving too far from 150. Therefore we can set a group of function from the original distribution to the target distribution:
+$$
+40\alpha + \beta = 50\\
+75\alpha + \beta = 80\\
+125\alpha+ \beta = 130\\
+150\alpha + \beta = 150
+$$
+ By the LSM, we can get the $\beta =  12.3208$ , and $\alpha = 0.9249$. 
 
 Notice that now the clip range is no longer  `[16, 235]`, the `Y` channel is in range of `[16, 235]`. 
 
-
-
 ### Output
 
-In the output image, the sky is brighter, and the shade of tree is darker (left of the image)
+In the output image, the sky is brighter, and the shade of tree is darker (left of the image). In the histogram, the darker part is moved from around 30 to around 45.
 
 <img src="./data/bcc_stat.png" style="zoom:50%;" />
 
@@ -204,38 +210,48 @@ In the output image, the sky is brighter, and the shade of tree is darker (left 
 
 ### Idea
 
+False Color was caused from the CFA interpolation. In short, false color is introduced into the image when the predicted color is inaccurate, especially in the gray area.
+
 First compute the gain of `u` dimension and `v` dimension by this piecewise function:
 $$
-gain_{u, v}(x, y) = \begin{cases} 
-    \text{gain} &  
-    |\text{edgemap}(y, x)| \leq \text{fcsEdge}_1 \\
-    \text{intercept} - \text{slope} \times \text{edgemap}(y, x) & 
-    \text{fcsEdge}_1 < |\text{edgemap}(y, x)| < \text{fcsEdge}_2 \\
-    0 & |\text{edgemap}(y, x)| \geq \text{fcsEdge}_2
-\end{cases}\\
-
-Y' = \frac{gain_{u, v}\times Y}{256} + 128
+Cb, Cr = \begin{cases} 
+    Cb, Cr &      |\text{EM}(y, x)| \leq \text{fcsEdge}_1 \\
+   \frac{\text{gain}\times(|EM|-128)}{65536}+128& 
+    \text{fcsEdge}_1 < |\text{EM}(y, x)| < \text{fcsEdge}_2 \\
+    0 & |\text{EM}(y, x)| \geq \text{fcsEdge}_2
+\end{cases}\\
 $$
+
+In this figure the edge map distribution is:
+
+<img src="./data/EM_stat.png" alt="EM_stat" style="zoom:67%;" />
+
+Therefore, I set the $\text{fcsEdge}_1 = 16$, and $\text{fcsEdge}_2 = 32$
 
 ### Acceleration
 
 Again use the mask boolean indices to assign the value in a vectorization way:
 
 ```python
-mask1 = np.abs(self.edgemap) <= self.fcs_edge[0]
+absEM = np.abs(self.edgemap)
+mask1 = absEM <= self.fcs_edge[0]
 mask2 = np.logical_and(
-    np.abs(self.edgemap) > self.fcs_edge[0], 
-    np.abs(self.edgemap) < self.fcs_edge[1])
-mask3 = np.abs(self.edgemap) >= self.fcs_edge[1]
+    absEM > self.fcs_edge[0], 
+    absEM < self.fcs_edge[1])
+mask3 = absEM >= self.fcs_edge[1]
         
-uvgain = np.empty((h, w, c), np.int16)
-uvgain[mask1] = self.gain
-uvgain[mask2, 0] = self.intercept - self.slope * self.edgemap[mask2]
-uvgain[mask2, 1] = self.intercept - self.slope * self.edgemap[mask2]      
-uvgain[mask3] = 0
+fcs_img[mask1] = self.img[mask1]
+fcs_img[mask2, 0] = self.gain*(absEM[mask2]-128)/65536 + 128
+fcs_img[mask2, 1] = self.gain*(absEM[mask2]-128)/65536 + 128    
+fcs_img[mask3] = 0
+        
+# np.clip(fcs_img, 0, 255, out=fcs_img)
+np.clip(fcs_img, 16,239, out=fcs_img)
 ```
 
 ### Output
+
+In the output, we can see the `Cb` part improved, and the darker part in `Cb` become brighter. In the RGB level, the darker part become less red, and more blue.
 
 <img src="./data/fcs_stat.png" style="zoom:50%;" />
 
@@ -283,7 +299,13 @@ After all, assign the `Y` channel as the BCC output, and assign the `Cr`, `Cb` c
 
 **Github**
 
+- ISP Pipeline | camera成像原理: https://juejin.cn/post/7309301549154828323
+
 - FastOpenISP: https://github.com/QiuJueqin/fast-openISP?tab=readme-ov-file
 - OpenISP: https://github.com/cruxopen/openISP
 
 - Opencv BCC: https://docs.opencv.org/3.4/d3/dc1/tutorial_basic_linear_transform.html
+
+- False Color Suppression in Demosaiced Color Images: https://www.cse.iitb.ac.in/~sharat/icvgip.org/icvgip2004/proceedings/ip1.3_029.pdf
+
+- FalseColor-Python: https://github.com/serrob23/falsecolor
