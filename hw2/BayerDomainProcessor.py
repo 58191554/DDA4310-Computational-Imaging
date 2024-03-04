@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from utils import *
-from tqdm import tqdm
+# from utils import *
+import matplotlib.pyplot as plt
 
 """
 input a raw image, the threshold, the dpc mode, and the dpc clip range
@@ -65,6 +65,46 @@ def malvar(ctr_name, ctr_val, y, x, img):
         g //= 8
     return np.stack((r, g, b), axis=-1)
     
+def conv5x5(img, kernel:np.ndarray):
+    img_pad = np.pad(img, ((2, 2), (2, 2)), 'reflect')
+    y_indices, x_indices = np.meshgrid(np.arange(0, img.shape[0], dtype=np.int32), np.arange(0, img.shape[1], dtype=np.int32))
+    a1 = img_pad[y_indices, x_indices]
+    a2 = img_pad[y_indices, x_indices+1]
+    a3 = img_pad[y_indices, x_indices+2]
+    a4 = img_pad[y_indices, x_indices+3]
+    a5 = img_pad[y_indices, x_indices+4]
+    a6 = img_pad[y_indices+1, x_indices]
+    a7 = img_pad[y_indices+1, x_indices+1]
+    a8 = img_pad[y_indices+1, x_indices+2]
+    a9 = img_pad[y_indices+1, x_indices+3]
+    a10 = img_pad[y_indices+1, x_indices+4]
+    a11 = img_pad[y_indices+2, x_indices]
+    a12 = img_pad[y_indices+2, x_indices+1]
+    a13 = img_pad[y_indices+2, x_indices+2]
+    a14 = img_pad[y_indices+2, x_indices+3]
+    a15 = img_pad[y_indices+2, x_indices+4]
+    a16 = img_pad[y_indices+3, x_indices]
+    a17 = img_pad[y_indices+3, x_indices+1]
+    a18 = img_pad[y_indices+3, x_indices+2]
+    a19 = img_pad[y_indices+3, x_indices+3]
+    a20 = img_pad[y_indices+3, x_indices+4]
+    a21 = img_pad[y_indices+4, x_indices]
+    a22 = img_pad[y_indices+4, x_indices+1]
+    a23 = img_pad[y_indices+4, x_indices+2]
+    a24 = img_pad[y_indices+4, x_indices+3]
+    a25 = img_pad[y_indices+4, x_indices+4]
+
+    kernel = kernel.flatten()
+    weighted_sum = np.sum(kernel[:, np.newaxis, np.newaxis] * 
+                    np.array([a1, a2, a3, a4, a5,
+                            a6, a7, a8, a9, a10,
+                            a11, a12, a13, a14, a15,
+                            a16, a17, a18, a19, a20,
+                            a21, a22, a23, a24, a25]), axis=0)
+
+    return np.transpose(weighted_sum)
+
+    
 class DPC:
     def __init__(self, img, thres, mode, clip):
         self.img = img
@@ -72,46 +112,63 @@ class DPC:
         self.mode = mode
         self.clip = clip
     
-    def execute(self):
-        padded_bayer = np.pad(self.img, ((2, 2), (2, 2)), 'reflect')
-        padded_sub_arrays = split_bayer(padded_bayer, 'rggb')
+    def execute(self, imgbose = False):
+
+        img_pad = np.pad(self.img, ((2, 2), (2, 2)), 'reflect')
+        dpc_img = np.transpose(self.img)
+
+        y_ids, x_ids = np.meshgrid(np.arange(img_pad.shape[0] - 4), np.arange(img_pad.shape[1] - 4))
+        p0 = img_pad[y_ids + 2, x_ids + 2].astype(int)
+        p1 = img_pad[y_ids,     x_ids].astype(int)
+        p2 = img_pad[y_ids,     x_ids + 2].astype(int)
+        p3 = img_pad[y_ids,     x_ids + 4].astype(int)
+        p4 = img_pad[y_ids + 2, x_ids].astype(int)
+        p5 = img_pad[y_ids + 2, x_ids + 4].astype(int)
+        p6 = img_pad[y_ids + 4, x_ids].astype(int)
+        p7 = img_pad[y_ids + 4, x_ids + 2].astype(int)
+        p8 = img_pad[y_ids + 4, x_ids + 4].astype(int)
         
-        dpc_sub_arrays = []
-        for padded_array in padded_sub_arrays:
-            shifted_arrays = tuple(shift_array(padded_array, window_size=3))   # generator --> tuple
-
-            mask = (np.abs(shifted_arrays[4] - shifted_arrays[1]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[7]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[3]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[5]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[0]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[2]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[6]) > self.thres) * \
-                   (np.abs(shifted_arrays[4] - shifted_arrays[8]) > self.thres)
-
-            dv = np.abs(2 * shifted_arrays[4] - shifted_arrays[1] - shifted_arrays[7])
-            dh = np.abs(2 * shifted_arrays[4] - shifted_arrays[3] - shifted_arrays[5])
-            ddl = np.abs(2 * shifted_arrays[4] - shifted_arrays[0] - shifted_arrays[8])
-            ddr = np.abs(2 * shifted_arrays[4] - shifted_arrays[6] - shifted_arrays[2])
-            indices = np.argmin(np.dstack([dv, dh, ddl, ddr]), axis=2)[..., None]
-
-            neighbor_stack = np.right_shift(np.dstack([
-                shifted_arrays[1] + shifted_arrays[7],
-                shifted_arrays[3] + shifted_arrays[5],
-                shifted_arrays[0] + shifted_arrays[8],
-                shifted_arrays[6] + shifted_arrays[2]
-            ]), 1)
-            dpc_array = np.take_along_axis(neighbor_stack, indices, axis=2).squeeze(2)
-            dpc_sub_arrays.append(
-                mask * dpc_array + ~mask * shifted_arrays[4]
-            )
-
-        dpc_bayer = reconstruct_bayer(dpc_sub_arrays, 'rggb')
-
-        dpc_bayer = dpc_bayer.astype(np.uint16)
-        return dpc_bayer
-
-    
+        mask = (np.abs(p1 - p0) > self.thres) & \
+               (np.abs(p2 - p0) > self.thres) & \
+               (np.abs(p3 - p0) > self.thres) & \
+               (np.abs(p4 - p0) > self.thres) & \
+               (np.abs(p5 - p0) > self.thres) & \
+               (np.abs(p6 - p0) > self.thres) & \
+               (np.abs(p7 - p0) > self.thres) & \
+               (np.abs(p8 - p0) > self.thres)
+               
+        if imgbose:
+            plt.imshow(mask.T)
+            plt.title("Dead Pixel Detection")
+            plt.show()
+            
+        # print(mask.shape)
+        # print(dpc_img.shape)
+        if self.mode == 'mean':
+            dpc_img[mask] = (p2 + p4 + p5 + p7) / 4
+        elif self.mode == 'gradient':
+            dv = abs(2 * p0 - p2 - p7)
+            dh = abs(2 * p0 - p4 - p5)
+            ddl = abs(2 * p0 - p1 - p8)
+            ddr = abs(2 * p0 - p3 - p6)
+            
+            min_indices = np.argmin([dv, dh, ddl, ddr], axis=0)
+            mask1 = (min_indices == 0) & mask
+            mask2 = (min_indices == 1) & mask
+            mask3 = (min_indices == 2) & mask
+            mask4 = (min_indices == 3) & mask
+            
+            # print(mask1.shape)
+            # print(p2.shape)
+            dpc_img[mask1] = ((p2 + p7 + 1) / 2)[mask1]
+            dpc_img[mask2] = ((p4 + p5 + 1) / 2)[mask2]
+            dpc_img[mask3] = ((p1 + p8 + 1) / 2)[mask3]
+            dpc_img[mask4] = ((p3 + p6 + 1) / 2)[mask4]
+            
+        dpc_img = dpc_img.astype('uint16')
+        return np.transpose(dpc_img)
+            
+            
 class BLC:
     def __init__(self, img, parameter, bayer_pattern, clip):
         self.img = img
@@ -154,27 +211,8 @@ class AAF:
         self.kernel = kernel
                       
     def execute(self):
-        bayer = self.img.astype(np.uint32)
-
-        padded_bayer = np.pad(bayer, ((2, 2), (2, 2)), 'reflect')
-
-        padded_sub_arrays = split_bayer(padded_bayer, 'rggb')
-
-        aaf_sub_arrays = []
-        for padded_array in padded_sub_arrays:
-            shifted_arrays = shift_array(padded_array, window_size=3)
-            aaf_sub_array = 0
-            for i, shifted_array in enumerate(shifted_arrays):
-                mul = 8 if i == 4 else 1
-                aaf_sub_array += mul * shifted_array
-
-            aaf_sub_arrays.append(np.right_shift(aaf_sub_array, 4))
-
-        aaf_bayer = reconstruct_bayer(aaf_sub_arrays, 'rggb')
-
-        aaf_bayer = aaf_bayer.astype(np.uint16)
-        return aaf_bayer
-
+        return conv5x5(self.img, self.kernel)
+    
 class AWB:
     def __init__(self, img, parameter, bayer_pattern, awb_clip):
         self.img = img

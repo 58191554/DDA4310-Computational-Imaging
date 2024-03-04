@@ -1,10 +1,141 @@
 # Homework 2 Image Signal Processing
 
-> Zhen Tong 120090694
+> [Zhen Tong](https://58191554.github.io/) 120090694
+
+![header](./data/header.jpg)
+
+In this project, we build a Image Signal Processing Pipeline with `Python`. In this ISP pipeline project, our contribution includes:
+
+- Dead Pixel Correction
+- Black Level Compensation
+- Anti Aliasing Filter
+- Auto White Balance and Gain Control
+- Color Filter Array Interpolation
+- Edge Enhancement for Luma
+- Brightness/Contrast Control for Luma
+- False Color Suppresion for Chroma
+- Hue/Saturation control for Chroma
+- RGB YUV image converting
+- Acceleration(26.15 sec) **10.47 times** faster than [OpenISP](https://github.com/QiuJueqin/fast-openISP?tab=readme-ov-file)(273.76 sec) 
 
 ## Dead Pixel Correction
 
+Since the Sensor is a physical device, it is difficult to avoid bad points. 
 
+### Idea
+
+The DPC is in two steps: detect the dead pixel, and recover it. Detection is compute the difference of each pixel and if the all the neighbor difference is bigger than the threshold, it is a dead pixel:
+$$
+diff_x(P_{i, j}) = |P_{i, j}-P_{x}|\\
+P_{i, j} = \begin{cases} 
+    Dead &      \and_{x\in neighbor} diff_x(P_{i, j}) \\
+   	Not\ Dead& Otherwise
+\end{cases}\\
+$$
+
+- **Mean Method**
+
+Assign the value of the dead pixel with neighbor mean
+
+- **Gradient Method**
+
+Compute the second order gradient of the image at the dead pixel in four direction. Assign the dead pixel as the average of the most "smooth "direction, which is the minimal one of the four absolute value.
+$$
+dv = |2 * p0 - p2 - p7|\\
+dh = |2 * p0 - p4 - p5|\\
+ddl = |2 * p0 - p1 - p8|\\
+ddr = |2 * p0 - p3 - p6|
+$$
+
+### Acceleration
+
+Because the DPC process need to iterate all the pixel to find the dead pixel, which is $O(N^2)$ time complexity. To speedup, we need to avoid the nested for loop in` python`, instead use the vectorize compute with `numpy`. First we generate 9 copy of the image matrix, and generate all the position to be compute, and record them in `y_ids`, and `x_ids`. We compute the mask matrix for all the dead pixel.
+
+```python
+y_ids, x_ids = np.meshgrid(np.arange(img_pad.shape[0] - 4), np.arange(img_pad.shape[1] - 4))
+p0 = img_pad[y_ids + 2, x_ids + 2].astype(int)
+p1 = img_pad[y_ids,     x_ids].astype(int)
+p2 = img_pad[y_ids,     x_ids + 2].astype(int)
+p3 = img_pad[y_ids,     x_ids + 4].astype(int)
+p4 = img_pad[y_ids + 2, x_ids].astype(int)
+p5 = img_pad[y_ids + 2, x_ids + 4].astype(int)
+p6 = img_pad[y_ids + 4, x_ids].astype(int)
+p7 = img_pad[y_ids + 4, x_ids + 2].astype(int)
+p8 = img_pad[y_ids + 4, x_ids + 4].astype(int)
+        
+mask = (np.abs(p1 - p0) > self.thres) & \
+       (np.abs(p2 - p0) > self.thres) & \
+       (np.abs(p3 - p0) > self.thres) & \
+       (np.abs(p4 - p0) > self.thres) & \
+       (np.abs(p5 - p0) > self.thres) & \
+       (np.abs(p6 - p0) > self.thres) & \
+       (np.abs(p7 - p0) > self.thres) & \
+       (np.abs(p8 - p0) > self.thres)
+if self.mode == 'mean':
+    dpc_img[mask] = (p2 + p4 + p5 + p7) / 4
+elif self.mode == 'gradient':
+    dv = abs(2 * p0 - p2 - p7)
+    dh = abs(2 * p0 - p4 - p5)
+    ddl = abs(2 * p0 - p1 - p8)
+    ddr = abs(2 * p0 - p3 - p6)
+    
+    min_indices = np.argmin([dv, dh, ddl, ddr], axis=0)
+    mask1 = (min_indices == 0) & mask
+    mask2 = (min_indices == 1) & mask
+    mask3 = (min_indices == 2) & mask
+    mask4 = (min_indices == 3) & mask
+    
+    dpc_img[mask1] = ((p2 + p7 + 1) / 2)[mask1]
+    dpc_img[mask2] = ((p4 + p5 + 1) / 2)[mask2]
+    dpc_img[mask3] = ((p1 + p8 + 1) / 2)[mask3]
+    dpc_img[mask4] = ((p3 + p6 + 1) / 2)[mask4]
+```
+
+### Ouptut
+
+The following figures are "***dead pixel*** when "threshold = 100, 150, 200. As you can see, they are not dead pixel most of the time, instead, they are the edges of the image. Because the DPC detection use gradient, and smooth the image unintentionally, we shouldn't set it too low. 
+
+<img src="./data/dpc_thrs=100.png" style="zoom:40%;" /><img src="./data/dpc_thrs=150.png" style="zoom:40%;" /><img src="./data/dpc_thrs=200.png" style="zoom:40%;" />
+
+![](./data/dpc.png)
+
+## Black Level Compensation
+
+Due to the existence of Sensor leakage current, the lens has just been put into a completely black environment, and the original output data of the Sensor is not 0; And we want the original number to be 0 when it's all black.
+$$
+R' = R + B_{\text{offset}}\\
+Gr' = Gr + Gr_{\text{offset}} + \alpha R\\
+Gb' = Gb + Gb_{\text{offset}} + \beta B\\
+B' =  B+ B_{\text{offset}}\\
+$$
+
+## Anti Aliasing Filter
+
+Do the convolution of the image with the kernel to avoid aliasing.
+$$
+\begin{bmatrix}
+1 & 0 & 1 & 0 & 1 \\
+0 & 0 & 0 & 0 & 0 \\
+1 & 0 & 8 & 0 & 1 \\
+0 & 0 & 0 & 0 & 0 \\
+1 & 0 & 1 & 0 & 1 \\
+\end{bmatrix}
+$$
+The acceleration of convolution is the same in Edge Enhancement, see later.
+
+## Auto White Balance and Gain Control
+
+By adjust the scale of RGrGbB, the quality of the image can improve.
+$$
+R = R \times r_{\text{gain}}\\
+
+B = B \times b_{\text{gain}}\\
+
+Gr = Gr \times gr_{\text{gain}}\\
+
+Gb = Gb \times gb_{\text{gain}}
+$$
+However, this process need hyperparameter, which depends on color expertise.
 
 ## Color Filter Array Interpolation
 
@@ -219,7 +350,7 @@ Cb, Cr = \begin{cases}
    \frac{\text{gain}\times(|EM|-128)}{65536}+128& 
     \text{fcsEdge}_1 < |\text{EM}(y, x)| < \text{fcsEdge}_2 \\
     0 & |\text{EM}(y, x)| \geq \text{fcsEdge}_2
-\end{cases}\\
+\end{cases}\\
 $$
 
 In this figure the edge map distribution is:
@@ -289,11 +420,21 @@ After all, assign the `Y` channel as the BCC output, and assign the `Cr`, `Cb` c
 
 ## How to Run
 
+You can run the code without checking detail
 
+```bash
+python hw2/isp_pipeline.py
+```
 
+Or you can check image change of each stage in the pipeline with 
 
+``` bash
+python hw2/isp_pipeline.py --imgbose
+```
 
+## Results
 
+You are free to access the result of each step under the `./data` directory.
 
 ## References
 

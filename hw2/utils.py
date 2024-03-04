@@ -171,78 +171,6 @@ channel_indices_and_weights = (
     [[3, 4, 6, 7], [-0.125, -0.125, -0.125, -0.125]]
 )
 
-def stat_draw(img:np.ndarray):
-    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-
-    # Plot histograms
-    axs[0, 0].hist(img[:, :, 0].flatten(), bins=30, edgecolor='black', color='r')
-    axs[0, 0].set_title('Red Channel Histogram')
-    axs[0, 0].set_xlabel('Value')
-    axs[0, 0].set_ylabel('Frequency')
-
-    axs[0, 1].hist(img[:, :, 1].flatten(), bins=30, edgecolor='black', color='g')
-    axs[0, 1].set_title('Green Channel Histogram')
-    axs[0, 1].set_xlabel('Value')
-    axs[0, 1].set_ylabel('Frequency')
-
-    axs[1, 0].hist(img[:, :, 2].flatten(), bins=30, edgecolor='black', color='b')
-    axs[1, 0].set_title('Blue Channel Histogram')
-    axs[1, 0].set_xlabel('Value')
-    axs[1, 0].set_ylabel('Frequency')
-
-    # Plot the image
-    axs[1, 1].imshow(img)
-    axs[1, 1].set_title('RGB Image')
-
-    # Hide the x and y ticks for the image plot
-    axs[1, 1].tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-
-    # Adjust layout to prevent overlapping
-    plt.tight_layout()
-
-    # Show the plot
-    plt.show()
-
-def stat_draw_yuv(y:np.ndarray, uv:np.ndarray):
-    fig, axs = plt.subplots(1, 3, figsize=(10, 8))
-
-    # Plot histograms
-    axs[0].hist(y[:, :].flatten(), bins=30, edgecolor='black')
-    axs[0].set_title('Y Channel Histogram')
-    axs[0].set_xlabel('Value')
-    axs[0].set_ylabel('Frequency')
-
-    axs[1].hist(uv[:, :, 0].flatten(), bins=30, edgecolor='black', color='r')
-    axs[1].set_title('Cr Channel Histogram')
-    axs[1].set_xlabel('Value')
-    axs[1].set_ylabel('Frequency')
-
-    axs[2].hist(uv[:, :, 1].flatten(), bins=30, edgecolor='black', color='b')
-    axs[2].set_title('Cb Channel Histogram')
-    axs[2].set_xlabel('Value')
-    axs[2].set_ylabel('Frequency')
-
-
-    # Adjust layout to prevent overlapping
-    plt.tight_layout()
-
-    # Show the plot
-    plt.show()
-
-def normalize(img, scale = 3000):
-    # 找到每个通道的最小值和最大值
-    img = img.astype(np.float32)
-    # img /= scale
-    min_vals = np.min(img, axis=(0, 1))
-    max_vals = np.max(img, axis=(0, 1))
-    
-    # 归一化每个通道
-    normalized_img = (img - min_vals) / (max_vals - min_vals + 1e-8)
-    
-    # 缩放到0-255范围
-    normalized_img = normalized_img * 255.0
-    
-    return normalized_img.astype(np.uint8)
 
 def index_weighted_sum(arrays, indices, weights):
     result = 0
@@ -250,31 +178,6 @@ def index_weighted_sum(arrays, indices, weights):
         result += w * arrays[i]
     return result
 
-def conv3x5(img, kernel:np.ndarray):
-    img_pad = np.pad(img, ((1, 1), (2, 2)), 'reflect')
-    y_indices, x_indices = np.meshgrid(np.arange(0, img.shape[0], dtype=np.int32), np.arange(0, img.shape[1], dtype=np.int32))
-    a1 = img_pad[y_indices, x_indices]
-    a2 = img_pad[y_indices, x_indices+1]
-    a3 = img_pad[y_indices, x_indices+2]
-    a4 = img_pad[y_indices, x_indices+3]
-    a5 = img_pad[y_indices, x_indices+4]
-    a6 = img_pad[y_indices+1, x_indices]
-    a7 = img_pad[y_indices+1, x_indices+1]
-    a8 = img_pad[y_indices+1, x_indices+2]
-    a9 = img_pad[y_indices+1, x_indices+3]
-    a10 = img_pad[y_indices+1, x_indices+4]
-    a11 = img_pad[y_indices+2, x_indices]
-    a12 = img_pad[y_indices+2, x_indices+1]
-    a13 = img_pad[y_indices+2, x_indices+2]
-    a14 = img_pad[y_indices+2, x_indices+3]
-    a15 = img_pad[y_indices+2, x_indices+4]
-    
-    kernel = kernel.flatten()
-    weighted_sum = np.sum(kernel[:, np.newaxis, np.newaxis] * np.array([a1, a2, a3, a4, a5,
-                                                                    a6, a7, a8, a9, a10,
-                                                                    a11, a12, a13, a14, a15]), axis=0)
-
-    return weighted_sum
 
 if __name__ == "__main__":
     img = np.array([[1]])
