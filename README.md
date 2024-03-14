@@ -6,8 +6,8 @@ This is the repository of [2024-Spring-DDA4310 | Computational Imaging | CUHK-Sh
 
 ## Homework 
 
-- [ ] hw1
-- [ ] hw2 ISP
-- [ ] hw3
+- [x] hw1 ISP with Rawpy
+- [x] hw2 ISP independent implementation 
+- [ ] hw3 HDR independent implementation
 - [ ] hw4
 
