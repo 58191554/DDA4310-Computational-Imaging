@@ -47,7 +47,7 @@ python main.py "$input_file49" "$output_dir5" --task-no $task_no --no-auto-brigh
 
 task_no=6
 python main.py "/home/tongzhen/workspace/DDA-ImageComputing/data/set01/DSC00049.JPG" "$output_dir6a" --task-no $task_no --RGB2YUV
-python main.py "/home/tongzhen/workspace/DDA-ImageComputing/data/set01/DSC00050.JPG" "$output_dir6b" --task-no $task_no --YUV2RGB
+python main.py "$output_dir6a" "$output_dir6b" --task-no $task_no --YUV2RGB
 
 task_no=7
 python main.py "$input_file49" "$output_dir7" --task-no $task_no 

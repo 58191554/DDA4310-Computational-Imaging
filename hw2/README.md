@@ -133,7 +133,7 @@ B = B \times b_{\text{gain}}\\
 
 Gr = Gr \times gr_{\text{gain}}\\
 
-Gb = Gb \times gb_{\text{gain}}
+Gb = Gb \times gb_{\text{gain}}
 $$
 However, this process need hyperparameter, which depends on color expertise.
 
@@ -203,7 +203,11 @@ After normalization:
 $$
 X = \frac{X-min(X)}{max(X)-min(X)}
 $$
-<img src="./data/cfa_3000norm.png" style="zoom:50%;" />
+<img src="./data/cfa_norm.png" style="zoom:50%;" />
+
+<img src="./data/cfa.png" style="zoom:100%;" />
+
+
 
 ## RGB2YUV
 
@@ -298,7 +302,7 @@ lut[mask5] = self.gain[1] * em_img[mask5]
 
 ### Output
 
-<img src="./data/ee_stat.png" style="zoom:50%;" />
+<img src="./data/ee_stat.png" style="zoom:35%;" />
 
 After computing the `EMLUT(x)`, clip the `EMLUT(x)` and add  it to the image as an output:
 
@@ -406,7 +410,7 @@ $$
 
 In the image below, we can observe both Cr and Cb showed more details, and more contrast.
 
-<img src="./data/hsc_stat.png" style="zoom:50%;" />
+<img src="./data/hsc_stat.png" style="zoom:40%;" />
 
 ![](./data/hsc.png)
 
@@ -415,8 +419,6 @@ In the image below, we can observe both Cr and Cb showed more details, and more 
 After all, assign the `Y` channel as the BCC output, and assign the `Cr`, `Cb` channel as the HSC output.
 
 ![](./data/output_stat.png)
-
-
 
 ## How to Run
 
@@ -435,6 +437,14 @@ python hw2/isp_pipeline.py --imgbose
 ## Results
 
 You are free to access the result of each step under the `./data` directory.
+
+**Compared to the `rawpy` Output without Gamma Correction** 
+
+![](../hw1/data/task1/output.jpg)
+
+**Our ISP Output**
+
+<img src="./results.png" style="zoom:200%;" />
 
 ## References
 

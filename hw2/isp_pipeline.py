@@ -82,9 +82,10 @@ if __name__ == "__main__":
     Bayer_dpc = dpc.execute(args.imgbose)
     print(50*'-' + '\n 1.1 Dead Pixel Correction Done......')
     if args.imgbose:
-        plt.imshow(Bayer_dpc)
-        plt.title("DPC")
-        plt.show()
+        # plt.imshow(Bayer_dpc)
+        # plt.title("DPC")
+        # plt.show()
+        pass
     # Step 2.'Black Level Compensation' (5pts)
     parameter = raw.black_level_per_channel + [alpha, beta]
     blkC = blackLevelCompensation(Bayer_dpc, parameter, bayer_pattern, clip = 2**14)
@@ -107,9 +108,10 @@ if __name__ == "__main__":
     Bayer_awb = awb.execute()
     print(50*'-' + '\n 1.5 White Balance Gain Done......')
     if args.imgbose:
-        plt.imshow(Bayer_awb)
-        plt.title("Auto White Balance and Gain Control")
-        plt.show()
+        # plt.imshow(Bayer_awb)
+        # plt.title("Auto White Balance and Gain Control")
+        # plt.show()
+        pass
 
     # # Step 6. Chroma Noise Filtering (Extra 20pts)
     # # cnf = ChromaNoiseFiltering(Bayer_awb, bayer_pattern, 0, parameter, cfa_clip)
@@ -119,6 +121,8 @@ if __name__ == "__main__":
     # Step 7. 'Color Filter Array Interpolation'  Malvar (20pts)
     cfa = CFA_Interpolation(Bayer_awb, cfa_mode, bayer_pattern, cfa_clip)
     rgbimg_cfa = cfa.execute()
+    if args.imgbose:
+        stat_draw(rgbimg_cfa)
     rgbimg_cfa = normalize(rgbimg_cfa)
     print(50*'-' + '\n 1.7 Demosaicing Done......')
     if args.imgbose:
@@ -157,9 +161,9 @@ if __name__ == "__main__":
         plt.imshow(rgbimg_cfa)
         plt.title("Before EE")
 
-    YUV[:, :, 0] = yuvimg_ee
-    ee_RGB = YUV2RGB(YUV)
-    ee_RGB = normalize(ee_RGB)
+        YUV[:, :, 0] = yuvimg_ee
+        ee_RGB = YUV2RGB(YUV)
+        ee_RGB = normalize(ee_RGB)
 
     if args.imgbose:
         plt.subplot(2, 2, 3)
@@ -189,9 +193,9 @@ if __name__ == "__main__":
         plt.imshow(ee_RGB)
         plt.title("RBG Before BCC")
 
-    YUV[:, :, 0] = yuvimg_bcc
-    bcc_RGB = YUV2RGB(YUV)
-    bcc_RGB = normalize(bcc_RGB)
+        YUV[:, :, 0] = yuvimg_bcc
+        bcc_RGB = YUV2RGB(YUV)
+        bcc_RGB = normalize(bcc_RGB)
 
     if args.imgbose:
         plt.subplot(2, 2, 3)
@@ -230,11 +234,10 @@ if __name__ == "__main__":
         plt.imshow(bcc_RGB)
         plt.title("RBG before FCS")
 
-    YUV[:, :, 1] = yuvimg_fcs[:, :, 0]
-    YUV[:, :, 2] = yuvimg_fcs[:, :, 1]
-    fcs_RBG = YUV2RGB(YUV)
-    fcs_RGB = normalize(fcs_RBG)
-    if args.imgbose:
+        YUV[:, :, 1] = yuvimg_fcs[:, :, 0]
+        YUV[:, :, 2] = yuvimg_fcs[:, :, 1]
+        fcs_RBG = YUV2RGB(YUV)
+        fcs_RGB = normalize(fcs_RBG)
 
         plt.subplot(2, 3, 4)
         plt.imshow(yuvimg_fcs[:, :, 0])
@@ -303,7 +306,8 @@ if __name__ == "__main__":
     # # #################################################################################################################
     print('ISP time cost : %.9f sec' %(time.time()-t_start)) 
 
-    
-    cv2.imwrite("results.jpg", RGB) # save as 8-bit JPG image as "results.jpg"
+    plt.imshow(RGB)
+    plt.savefig("results.png") 
+    plt.show()
 
 

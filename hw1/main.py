@@ -28,7 +28,8 @@ def raw_processing(input_file, output_file, args):
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     
     cv2.imwrite(output_file, bgr)
-
+    print("raw process complete...")
+    
 def rgb_to_yuv(input_file, output_file):
     rgb_image = cv2.imread(input_file)
     
