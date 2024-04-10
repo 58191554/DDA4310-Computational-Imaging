@@ -64,7 +64,7 @@ def show_freq(X, title="", show=True):
     else:
         return img.astype(np.float64)
 
-def get_denoise(B, H, L, lbd, N = None, epsilon = 0.001):
+def get_denoise(B, H, L, lbd, N = None, epsilon = 0.0001):
     X = np.zeros_like(B)
     H_2 = np.square(H)
     H_conj = np.conj(H)
@@ -213,13 +213,13 @@ def get_pad_deblur(blur_list, pad_img, pad_mask_cal, LBD = 0.01):
     deblur_list = []
 
     pad_deblur_img = np.zeros_like(pad_img, dtype=np.float64)
-    for i, row in enumerate(blur_list):
+    for i, row in tqdm(enumerate(blur_list)):
         deblur_row = []
         for j, blur in enumerate(row):
             # Compute deblur
             f_size = (blur.shape[0], blur.shape[1])
             B = get_frequency_domain_rgb(blur, f_size)
-            G_matrix = np.fft.fft2(gaussian_kernel, s=f_size)
+            G_matrix = np.fft.fft2(get_gaussian_kernel(blur.shape[0], blur.shape[1]), s=f_size)
             L_matrix = np.fft.fft2(Lap3x3_2, s=f_size)
             X = get_denoise(B, G_matrix, L_matrix, LBD)
             deblur = get_spatial_domain_rbg(X, patches[i][j].shape)
@@ -276,7 +276,7 @@ def getX(dst, mask, lap):
                 A[i, hhash[p[j]]] = 1
             else:
                 b[i] -= dst[p[j]]
-                
+    print("="*15+" Solving Linear Equation Ax=b... "+"="*15)
     A = A.tocsc()
     X = linalg.splu(A).solve(b)
 
@@ -293,11 +293,12 @@ def getX(dst, mask, lap):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--img-path", type=str, default="../data/Apollo_15_flag_rover_LM_Irwin-1200x1200.jpg")
+    parser.add_argument("--img-path", type=str, default="Apollo_15_flag_rover_LM_Irwin-1200x1200.jpg")
     parser.add_argument("--m-size", type=int, default=4)
     parser.add_argument("--p-size", type=int, default=100)
+    parser.add_argument("--lbd", type=float, default=0.05)
     
-    # img_path = "../data/Apollo_15_flag_rover_LM_Irwin-1200x1200.jpg"
+    # img_path = "Apollo_15_flag_rover_LM_Irwin-1200x1200.jpg"
     
     args = parser.parse_args()
     src_img = cv2.imread(args.img_path)
@@ -346,6 +347,7 @@ if __name__ == "__main__":
     pad_img, _, _ = add_gaussian_noise(src_img)
     pad_img = np.pad(pad_img, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="constant", constant_values=1)
     blur_list = []
+    print("="*15+" patch task distributing... "+"="*15)
     for i, patch_row in enumerate(patches):
         blur_row = []
         for j, patch in enumerate(patch_row):
@@ -370,8 +372,12 @@ if __name__ == "__main__":
     pad_mask = np.pad(mask, ((pad_size, pad_size), (pad_size, pad_size)), mode="constant", constant_values=1)-1
     pad_mask_cal = deepcopy(pad_mask).astype(np.float64)+1
     pad_mask[pad_mask>0] = 1
+    print("="*15+" patch deblur processing... "+"="*15)
 
-    pad_deblur_img, deblur_list = get_pad_deblur(blur_list, pad_img, pad_mask_cal, LBD=0.01)
+    pad_deblur_img, deblur_list = get_pad_deblur(blur_list, pad_img, pad_mask_cal, LBD=args.lbd)
+    
+    print("="*15+" Poission Blending... "+"="*15)
+
     output = seamlessClone(pad_img, pad_deblur_img, pad_mask, 0)
     plt.axis("off");plt.title("blur");plt.imshow(pad_img.astype(np.int32));plt.show();
     pad_img = np.clip(pad_img, 0, 255, out=pad_img)

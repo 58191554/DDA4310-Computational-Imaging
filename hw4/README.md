@@ -124,7 +124,7 @@ for i, (x, y) in enumerate(zip(loc[0],loc[1])):
 
 ## Results
 
-First, we can use the patch2patch deblur and sum all the patches up to the output image:
+First, we can use the patch2patch deblur and sum all the patches up to the output image, (patch size = 100, margin size = 10):
 
 <img src="./imgs/deblur.png" style="zoom:150%;" />
 
@@ -134,7 +134,37 @@ Then we can set the overlaping lighter area in the mask as the source image, and
 
 ## How to Run
 
-- Using the Jupyter notebook, see the [running log]()
+- Using the python3, go to the `src` directory
+
+  ```bash
+  python main.py --img-path <img.png> --m-size <margin size> --p-size <patch size> --lbd <The lambda for the laplacian panalty> --
+  ```
+
+  Or run as default
+
+  ```bash
+  python main.py
+  ```
+
+- Using the Jupyter notebook, run `notebook.ipynb`, see the [running log](log.pdf)
+
+## More Running Show Case
+
+```bash
+--m-size 2 --p-size 10 --lbd 0.01
+```
+
+Blur Image:
+
+![](./imgs/gzs_blur.png)
+
+Image after patch deblur
+
+![](./imgs/gzs_deblur_no_poission.png)
+
+Image after poission blending
+
+![](./imgs/gzs_deblur_poission.png)
 
 ## References
 
